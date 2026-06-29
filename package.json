@@ -1,0 +1,8 @@
+{
+  "name": "tifton-fitness-scheduler-portal",
+  "version": "22.0.0",
+  "private": true,
+  "description": "Shared live scheduling portal for Tifton Fitness.",
+  "engines": { "node": ">=18" },
+  "dependencies": { "@netlify/blobs": "^10.7.7" }
+}

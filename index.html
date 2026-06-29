@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#05070A" />
+  <title>TF Scheduling Command Center · v24</title>
+  <style>
+    :root{
+      --bg:#05070A;--panel:rgba(13,18,26,.86);--tile:#101A26;--tile2:#0B111A;
+      --border:rgba(255,255,255,.14);--blue:#1F8CFF;--blue2:#64B4FF;--cream:#F8F1E3;
+      --muted:#A9B4C2;--success:#73D99F;--warning:#FFD166;--error:#FF6B6B;
+      --shadow:0 24px 76px rgba(0,0,0,.55);--radius:20px;
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;color:var(--cream);background:radial-gradient(circle at 14% 2%,rgba(31,140,255,.28),transparent 28%),radial-gradient(circle at 88% 12%,rgba(100,180,255,.13),transparent 27%),linear-gradient(135deg,#05070A 0%,#08101A 55%,#05070A 100%);overflow-x:hidden}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);background-size:44px 44px;mask-image:linear-gradient(to bottom,rgba(0,0,0,.7),transparent 82%)}
+    button,input,select,textarea{font:inherit}button{cursor:pointer}.hidden{display:none!important}.app{position:relative;z-index:1;max-width:1680px;margin:0 auto;padding:22px}.topbar{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:13px}.mark{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;font-weight:950;letter-spacing:-.08em;color:#fff;background:linear-gradient(145deg,#2293ff,rgba(100,180,255,.38));box-shadow:0 0 34px rgba(31,140,255,.42),inset 0 1px 0 rgba(255,255,255,.28)}.eyebrow{font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--blue2)}.brand h1{margin:3px 0 0;font-size:clamp(23px,2.4vw,35px);letter-spacing:-.055em;line-height:1}.top-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.pill{display:inline-flex;align-items:center;gap:7px;padding:9px 11px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.04);font-size:12px;color:var(--muted);font-weight:800}.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 13px var(--success)}.pill.warn .dot{background:var(--warning);box-shadow:0 0 13px var(--warning)}
+    .btn{border:1px solid var(--border);border-radius:13px;padding:10px 13px;color:var(--cream);font-weight:850;font-size:12px;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));box-shadow:0 11px 28px rgba(0,0,0,.22);transition:.16s ease}.btn:hover{border-color:rgba(100,180,255,.5);transform:translateY(-1px);box-shadow:0 14px 31px rgba(31,140,255,.16)}.btn.primary{background:linear-gradient(135deg,var(--blue),#145eb9);border-color:rgba(100,180,255,.6)}.btn.success{background:linear-gradient(135deg,#75dfaa,#409c6e);color:#061109;border-color:rgba(115,217,159,.65)}.btn.warn{color:var(--warning);background:rgba(255,209,102,.12);border-color:rgba(255,209,102,.35)}.btn.danger{color:var(--error);background:rgba(255,107,107,.11);border-color:rgba(255,107,107,.35)}.btn.ghost{background:rgba(255,255,255,.035);box-shadow:none}.btn.requests-idle{opacity:.72;color:var(--muted)}.btn.requests-active{position:relative;color:var(--warning);border-color:rgba(255,176,69,.82);background:linear-gradient(135deg,rgba(255,194,76,.25),rgba(255,121,66,.17));animation:requestGlow 1.65s ease-in-out infinite}.btn.requests-active:after{content:"";position:absolute;inset:-4px;border:1px solid rgba(255,176,69,.6);border-radius:17px;animation:requestRing 1.65s ease-out infinite;pointer-events:none}@keyframes requestGlow{0%,100%{box-shadow:0 0 14px rgba(255,176,69,.14)}50%{box-shadow:0 0 31px rgba(255,161,65,.62)}}@keyframes requestRing{0%{opacity:.78;transform:scale(.9)}100%{opacity:0;transform:scale(1.18)}}
+    .layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:16px;align-items:start}.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);backdrop-filter:blur(18px);overflow:hidden}.panel-pad{padding:15px}.section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:11px}.section-title h2{font-size:15px;letter-spacing:-.02em;margin:0}.section-title span,.hint{font-size:11px;color:var(--muted);line-height:1.45}.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:13px}.stat{border:1px solid var(--border);border-radius:15px;padding:11px;background:var(--tile)}.stat b{display:block;font-size:22px;line-height:1}.stat small{font-size:10px;color:var(--muted);font-weight:800}.class-type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.type-card{position:relative;aspect-ratio:1.05/1;display:flex;flex-direction:column;justify-content:space-between;gap:8px;padding:11px;border:1px solid var(--border);border-radius:16px;background:linear-gradient(160deg,rgba(16,26,38,.98),rgba(8,13,20,.98));overflow:hidden;transition:.16s ease}.type-card:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at top right,var(--type-glow),transparent 48%);opacity:.6;pointer-events:none}.type-card[draggable=true]{cursor:grab}.type-card:active{cursor:grabbing}.type-card:hover{transform:translateY(-2px);border-color:var(--type);box-shadow:0 13px 31px var(--type-glow)}.type-card strong,.type-card small{position:relative}.type-card strong{font-size:13px;line-height:1.05}.type-card small{color:var(--muted);font-size:10px;line-height:1.25}.type-card .type-edit{position:absolute;top:7px;right:7px;width:25px;height:25px;border-radius:9px;border:1px solid var(--border);background:rgba(5,7,10,.55);color:var(--cream);z-index:2}.divider{height:1px;background:rgba(255,255,255,.1);margin:15px 0}.recent-list{display:grid;gap:7px}.recent{padding:9px;border:1px solid rgba(255,255,255,.1);border-radius:13px;background:rgba(255,255,255,.035)}.recent b{font-size:12px}.recent p{margin:3px 0 0;font-size:10px;color:var(--muted);line-height:1.32}
+    .calendar-wrap{padding:14px}.calendar-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:13px}.calendar-title{font-size:17px;font-weight:950;letter-spacing:-.035em}.calendar-subtitle{font-size:11px;color:var(--muted);margin-top:3px}.calendar-shell{overflow:auto;border:1px solid var(--border);border-radius:17px;background:rgba(5,7,10,.38)}.week-calendar{min-width:900px;display:grid;grid-template-columns:64px repeat(5,minmax(150px,1fr));background:rgba(255,255,255,.035)}.cal-head{position:sticky;top:0;z-index:3;padding:10px 8px;min-height:52px;border-bottom:1px solid var(--border);border-right:1px solid rgba(255,255,255,.08);background:rgba(13,18,26,.96);font-size:12px;font-weight:900;text-align:center}.cal-head:first-child{text-align:left;color:var(--muted)}.cal-head small{display:block;font-size:10px;color:var(--muted);font-weight:750;margin-top:3px}.time-cell{min-height:92px;padding:8px 7px;border-right:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);color:var(--muted);font-size:10px;font-weight:850}.day-cell{position:relative;min-height:92px;padding:5px;border-right:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);transition:.14s ease}.day-cell.available{background:linear-gradient(135deg,rgba(115,217,159,.025),transparent)}.day-cell.available:empty:after{content:"";position:absolute;inset:7px;border:1px dashed rgba(115,217,159,.52);border-radius:11px;pointer-events:none}.day-cell.drag-over{background:rgba(31,140,255,.13);box-shadow:inset 0 0 0 1px var(--blue2)}.session-tile{position:relative;height:80px;width:100%;padding:8px 9px;overflow:hidden;border:1px solid rgba(255,255,255,.13);border-left:4px solid var(--type);border-radius:13px;background:linear-gradient(150deg,rgba(16,26,38,.98),rgba(8,13,21,.98));box-shadow:0 8px 19px rgba(0,0,0,.18);transition:.15s ease}.session-tile[draggable=true]{cursor:grab}.session-tile:active{cursor:grabbing}.session-tile:hover{z-index:1;transform:translateY(-1px);border-color:var(--type)}.session-tile .title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}.session-tile strong{font-size:12px;line-height:1.05;letter-spacing:-.01em}.session-tile .format{font-size:8.5px;max-width:48%;padding:3px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid rgba(255,255,255,.12);border-radius:999px;color:var(--muted)}.session-tile .names{font-size:9px;font-weight:800;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:5px}.session-tile .meta{position:absolute;left:9px;right:9px;bottom:7px;display:flex;justify-content:space-between;gap:4px;color:var(--muted);font-size:9px}.session-tile .meta span:last-child{white-space:nowrap}.slot-request{position:absolute;inset:8px;width:calc(100% - 16px);border:1px dashed rgba(115,217,159,.6);border-radius:11px;background:rgba(115,217,159,.04);color:rgba(115,217,159,.92);font-size:10px;font-weight:900;opacity:0;transition:.15s ease}.day-cell.available:hover .slot-request{opacity:1}.day-cell:not(.available) .slot-request{display:none}.live .session-tile{height:76px}.live .session-tile .meta{display:none}.live .session-tile .names{display:none}.live .session-tile .format{color:var(--blue2)}.live .session-tile{display:flex;align-items:center}.live .session-tile strong{font-size:12px}.live .session-tile .title-row{width:100%}
+    .gym-stage{padding:15px}.gym-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}.gym-grid-shell{overflow:auto;border:1px solid var(--border);border-radius:18px;background:rgba(5,7,10,.45)}.gym-grid{min-width:910px;display:grid;grid-template-columns:70px repeat(var(--coach-count),minmax(170px,1fr))}.gym-head{position:sticky;top:0;z-index:2;min-height:60px;padding:11px 10px;border-bottom:1px solid var(--border);border-right:1px solid rgba(255,255,255,.08);background:rgba(13,18,26,.98);text-align:center}.gym-head b{display:block;font-size:13px}.gym-head small{color:var(--muted);font-size:10px}.gym-time{min-height:94px;padding:9px;border-right:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);color:var(--muted);font-size:10px;font-weight:850}.gym-slot{position:relative;min-height:94px;padding:7px;border-right:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.015)}.gym-slot.available:empty:after{content:"";position:absolute;inset:10px;border:1px dashed rgba(115,217,159,.24);border-radius:12px}.gym-tile{height:80px;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;border:1px solid rgba(255,255,255,.14);border-top:4px solid var(--type);border-radius:13px;background:linear-gradient(150deg,rgba(16,26,38,.98),rgba(7,12,19,.98));overflow:hidden}.gym-tile strong{font-size:12px;line-height:1.1}.gym-tile small{display:block;color:var(--muted);font-size:9px;margin-top:4px}
+    .login{position:relative;z-index:1;display:grid;min-height:100vh;place-items:center;padding:22px}.login-card{width:min(440px,100%);padding:32px;border:1px solid var(--border);border-radius:27px;background:rgba(13,18,26,.86);backdrop-filter:blur(18px);box-shadow:var(--shadow);text-align:center}.login-card .mark{margin:auto}.login-card h1{margin:7px 0 9px;letter-spacing:-.05em;font-size:31px}.login-copy{margin:0 auto 20px;max-width:350px;color:var(--muted);font-size:13px;line-height:1.55}.field{display:grid;gap:6px;text-align:left;margin-bottom:10px}.field label{font-size:10px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}.field input,.field select,.field textarea{width:100%;border:1px solid var(--border);border-radius:12px;padding:11px;background:rgba(5,7,10,.65);color:var(--cream);outline:none}.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue2);box-shadow:0 0 0 3px rgba(31,140,255,.14)}.login-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.server-note{margin-top:15px;font-size:10px;color:var(--muted);line-height:1.45}
+    .backdrop{position:fixed;z-index:50;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.66);backdrop-filter:blur(9px)}.backdrop.open{display:flex}.modal{width:min(900px,calc(100vw - 36px));max-height:90vh;overflow:auto;border:1px solid rgba(100,180,255,.42);border-radius:24px;padding:20px;background:linear-gradient(155deg,rgba(16,26,38,.99),rgba(7,11,17,.99));box-shadow:0 0 0 1px rgba(31,140,255,.1),0 0 48px rgba(31,140,255,.16),var(--shadow);animation:modalIn .18s ease both}@keyframes modalIn{from{opacity:0;transform:scale(.98) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:15px}.modal-head h2{margin:0;font-size:25px;letter-spacing:-.045em}.modal-head p{margin:4px 0 0;color:var(--muted);font-size:12px}.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.card{border:1px solid var(--border);border-radius:17px;padding:14px;background:rgba(5,7,10,.32)}.kind-grid,.repeat-days,.button-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.kind-btn,.repeat-btn,.confirmation-btn{border:1px solid var(--border);border-radius:12px;padding:10px;background:rgba(255,255,255,.045);color:var(--muted);font-size:11px;font-weight:900}.kind-btn.active,.confirmation-btn.active{background:rgba(31,140,255,.19);border-color:rgba(100,180,255,.62);color:var(--cream);box-shadow:0 0 20px rgba(31,140,255,.16)}.repeat-btn.none{color:var(--warning);border-color:rgba(255,209,102,.44);background:rgba(255,209,102,.12)}.repeat-btn.active{background:rgba(255,209,102,.21);border-color:rgba(255,209,102,.7);color:var(--cream)}.form-two,.form-three{display:grid;gap:9px}.form-two{grid-template-columns:1fr 1fr}.form-three{grid-template-columns:repeat(3,1fr)}.stepper{display:grid;grid-template-columns:34px 1fr 34px;align-items:center;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:rgba(5,7,10,.52)}.stepper button{border:0;background:rgba(255,255,255,.05);color:var(--cream);height:39px;font-size:18px}.stepper strong{text-align:center;font-size:12px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:13px}.booked-list{display:grid;gap:7px;max-height:310px;overflow:auto}.booked-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:9px;background:rgba(255,255,255,.03)}.booked-row b{font-size:12px}.booked-row small{display:block;color:var(--muted);font-size:10px;margin-top:2px}.x-btn{width:27px;height:27px;display:grid;place-items:center;border:1px solid rgba(255,107,107,.34);border-radius:9px;background:rgba(255,107,107,.09);color:var(--error);font-weight:950}.request-list{display:grid;gap:9px}.request-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid var(--border);border-radius:14px;padding:12px;background:rgba(255,255,255,.03)}.request-row b{font-size:13px}.request-row p{margin:4px 0 0;color:var(--muted);font-size:11px;line-height:1.4}.request-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.client-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}.search{min-width:210px;flex:1;border:1px solid var(--border);border-radius:12px;padding:10px;background:rgba(5,7,10,.6);color:var(--cream)}.client-table-wrap{border:1px solid var(--border);border-radius:15px;max-height:54vh;overflow:auto;background:rgba(5,7,10,.34)}table{width:100%;border-collapse:collapse;min-width:680px}th{position:sticky;top:0;z-index:1;background:#0D121A;color:var(--blue2);font-size:10px;letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:10px;border-bottom:1px solid var(--border)}td{padding:8px;border-bottom:1px solid rgba(255,255,255,.07);vertical-align:middle}td input,td select{width:100%;min-width:92px;padding:8px;border:1px solid rgba(255,255,255,.12);border-radius:9px;background:rgba(5,7,10,.67);color:var(--cream);font-size:11px}.dropzone{display:grid;place-items:center;min-height:112px;text-align:center;border:1px dashed rgba(100,180,255,.58);border-radius:14px;background:rgba(31,140,255,.05);padding:12px;color:var(--muted);font-size:11px}.dropzone.drag{border-color:var(--blue2);background:rgba(31,140,255,.13)}.dropzone b{color:var(--cream);font-size:12px}.backup-list{display:grid;gap:7px;max-height:280px;overflow:auto}.backup-row{display:flex;align-items:center;justify-content:space-between;gap:9px;border:1px solid var(--border);padding:9px;border-radius:12px;background:rgba(255,255,255,.025)}.backup-row b{font-size:12px}.backup-row small{display:block;font-size:10px;color:var(--muted);margin-top:2px}.toast{position:fixed;z-index:80;left:50%;bottom:20px;transform:translateX(-50%) translateY(18px);opacity:0;pointer-events:none;border:1px solid rgba(100,180,255,.4);border-radius:13px;padding:11px 14px;background:#0D121A;color:var(--cream);box-shadow:var(--shadow);font-size:12px;font-weight:850;transition:.2s ease}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}.empty{padding:20px;border:1px dashed rgba(255,255,255,.18);border-radius:13px;color:var(--muted);font-size:12px;text-align:center}.sync-error{color:var(--warning)}
+    @media(max-width:1060px){.layout{grid-template-columns:1fr}.panel-pad{display:block}.class-type-grid{grid-template-columns:repeat(5,minmax(100px,1fr));overflow:auto}.type-card{min-width:100px}.modal-grid{grid-template-columns:1fr}.topbar{align-items:flex-start}.top-actions{justify-content:flex-start}}@media(max-width:660px){.app{padding:13px}.topbar{display:grid}.brand h1{font-size:26px}.login-actions{grid-template-columns:1fr}.form-three,.form-two{grid-template-columns:1fr}.kind-grid,.repeat-days{grid-template-columns:1fr 1fr}.modal{padding:15px;border-radius:20px}.modal-head h2{font-size:22px}.class-type-grid{grid-template-columns:repeat(2,1fr)}.calendar-header .top-actions{width:100%}.calendar-header .btn{flex:1}.pill{font-size:10px}}
+  </style>
+</head>
+<body>
+  <main id="root"></main>
+  <div class="backdrop" id="backdrop"><section class="modal" id="modal"></section></div>
+  <div class="toast" id="toast"></div>
+<script>
+(() => {
+  const API='/.netlify/functions/scheduler-api';
+  const DAYS=['Mon','Tue','Wed','Thu','Fri'];
+  const TIMES=Array.from({length:16},(_,i)=>String(i+5).padStart(2,'0')+':00');
+  const params=new URLSearchParams(location.search);
+  const initialMode=params.has('gym')?'gym':params.has('live')?'live':'login';
+  const root=document.getElementById('root'), modal=document.getElementById('modal'), backdrop=document.getElementById('backdrop'), toastEl=document.getElementById('toast');
+  // Keep initial state declarations above helpers, but initialize date values only after the helper functions exist.
+  // The previous build evaluated monday()/iso() before their const declarations, which stopped the entire app from rendering.
+  let mode=initialMode, state=null, token=sessionStorage.getItem('tf_scheduler_admin_token')||'', activeCoachId='jordan', weekStart=null, gymDate='', poller=null, saving=false, drag=null;
+  const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const uid=()=>`${Date.now().toString(36)}_${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`;
+  const clone=o=>JSON.parse(JSON.stringify(o));
+  const iso=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).toISOString().slice(0,10);
+  const monday=d=>{const x=new Date(d);x.setHours(0,0,0,0);const shift=(x.getDay()+6)%7;x.setDate(x.getDate()-shift);return x};
+  const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+  weekStart=monday(new Date());
+  gymDate=iso(new Date());
+  const dateFor=(base,index)=>iso(addDays(base,index));
+  const dayName=date=>DAYS[(new Date(date+'T12:00:00').getDay()+6)%7];
+  const prettyTime=t=>{const [h,m]=t.split(':').map(Number);return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`};
+  const prettyDate=d=>new Date(d+'T12:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+  const fmtDateTime=d=>new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  function toast(text,kind=''){toastEl.textContent=text;toastEl.className=`toast show ${kind}`;clearTimeout(toastEl._t);toastEl._t=setTimeout(()=>toastEl.className='toast',3000)}
+  async function api(path='',options={}){
+    const headers={'Content-Type':'application/json',...(options.headers||{})}; if(token)headers.Authorization=`Bearer ${token}`;
+    let res;
+    try{
+      res=await fetch(API+path,{...options,headers,cache:'no-store'});
+    }catch(networkError){
+      const err=new Error('Unable to reach the scheduler server. Please retry in a few seconds.');
+      err.status=0; throw err;
+    }
+    const body=await res.json().catch(()=>({ok:false,error:'The scheduler server returned an unexpected response.'}));
+    if(!res.ok||body.ok===false){const err=new Error(body.error||'Scheduler server request failed.');err.status=res.status;err.data=body;throw err}
+    return body;
+  }
+  function coach(id){return state?.coaches?.find(c=>c.id===id)||state?.coaches?.[0]||null}
+  function type(id){return state?.classTypes?.find(t=>t.id===id)||state?.classTypes?.[0]||{name:'Session',color:'#1F8CFF',duration:60,visible:true}}
+  function clientsForSession(id){return (state.bookings||[]).filter(b=>b.sessionId===id&&['approved','confirmed'].includes(b.status||'approved')).map(b=>state.clients?.find(c=>c.id===b.clientId)||b.client||{}).filter(Boolean)}
+  function bookedCount(s){return s.bookedCount ?? clientsForSession(s.id).length}
+  function isAvailable(coachId,date,time){return !!state?.availability?.[coachId]?.[dayName(date)]?.[time]}
+  function sessionsAt(date,time,coachId){return (state?.sessions||[]).filter(s=>s.date===date&&s.time===time&&s.coachId===coachId&&s.status!=='canceled')}
+  function activeCoaches(){return (state?.coaches||[]).filter(c=>c.active!==false)}
+  function isAdmin(){return mode==='coach'&&!!token}
+  function syncPill(){const s=state?.updatedAt?`Saved ${new Date(state.updatedAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'Connecting…';return `<span class="pill ${saving?'warn':''}"><span class="dot"></span>${saving?'Saving securely…':esc(s)}</span>`}
+  function clientNames(s){const names=clientsForSession(s.id).map(c=>c.name).filter(Boolean);if(!names.length)return '';const visible=names.slice(0,3);const rest=names.length-visible.length;return `${visible.join(' · ')}${rest?` +${rest}`:''}`}
+  function tile(s,context='coach'){
+    const t=type(s.classTypeId), c=coach(s.coachId), count=bookedCount(s), publicTile=context!=='coach';
+    return `<article class="${context==='gym'?'gym-tile':'session-tile'}" ${context==='coach'?'draggable="true"':''} data-session="${esc(s.id)}" style="--type:${esc(t.color||'#1F8CFF')};--type-glow:${esc((t.color||'#1F8CFF')+'55')}">${context==='gym'?`<div><strong>${esc(t.name)}</strong><small>${esc(s.kind||'Group')} · ${count}/${s.capacity||10}</small></div>`:`<div class="title-row"><strong>${esc(t.name)}</strong><span class="format">${esc(s.kind||'Group')}</span></div>${context==='coach'&&clientNames(s)?`<div class="names">${esc(clientNames(s))}</div>`:''}<div class="meta"><span>${context==='coach'?esc(c?.name||'Coach'):`${count}/${s.capacity||10} spots`}</span><span>${context==='coach'?`${s.durationMinutes||60} min`:''}</span></div>`}</article>`;
+  }
+  function header(){
+    const pending=(state?.requests||[]).filter(r=>r.status==='requested').length;
+    const title=mode==='gym'?'Gym View':mode==='live'?'Client Live Feed':'Scheduling Command Center';
+    const eyebrow=mode==='gym'?'Live company schedule':mode==='live'?'Live availability · request only':'Coach workspace';
+    return `<header class="topbar"><div class="brand"><div class="mark">TF</div><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1></div></div><div class="top-actions">${mode==='coach'?`${syncPill()}<button class="btn ${pending?'requests-active':'requests-idle'}" id="requestsBtn">Requests${pending?` (${pending})`:''}</button><button class="btn" id="gymBtn">Gym View</button><button class="btn" id="backupBtn">Backups</button><button class="btn" id="availabilityBtn">Availability</button><button class="btn" id="coachesBtn">Coaches</button><button class="btn" id="clientsBtn">Clients</button><button class="btn ghost" id="logoutBtn">Logout</button>`:mode==='live'?`<span class="pill"><span class="dot"></span>Live schedule</span><a class="btn ghost" href="?gym=1">Gym View</a>`:`<span class="pill"><span class="dot"></span>Live schedule</span><a class="btn ghost" href="?live=1">Client Feed</a>`}</div></header>`;
+  }
+  function legacyDate(day, weekOffset=0){
+    const base=monday(new Date());
+    const index=Math.max(0,DAYS.indexOf(day));
+    return iso(addDays(base,index+(Math.max(0,Number(weekOffset)||0)*7)));
+  }
+  function convertLegacyState(legacy, server){
+    const next=clone(server);
+    const oldCoaches=Array.isArray(legacy.coaches)?legacy.coaches:[];
+    const coaches=oldCoaches.length?oldCoaches.map((c,i)=>({id:c.id||`legacy_coach_${i+1}`,name:c.name||`Coach ${i+1}`,role:['Admin / Coach','Coach','Manager'].includes(c.role)?c.role:'Coach',active:c.active!==false})):next.coaches;
+    if(!coaches.some(c=>c.id==='jordan')) coaches.unshift({id:'jordan',name:'Jordan',role:'Admin / Coach',active:true});
+    next.coaches=coaches;
+    next.availability={};
+    for(const c of coaches){
+      const source=oldCoaches.find(x=>(x.id||'')===c.id)?.availability || legacy.availability || {};
+      next.availability[c.id]={};
+      for(const day of DAYS){next.availability[c.id][day]={};for(const tm of TIMES)next.availability[c.id][day][tm]=Boolean(source?.[day]?.[tm]);}
+    }
+    if(Array.isArray(legacy.classTypes)&&legacy.classTypes.length){next.classTypes=legacy.classTypes.map((t,i)=>({id:t.id||`legacy_type_${i+1}`,name:t.name||`Type ${i+1}`,intensity:t.intensity||'Training',desc:t.desc||'',duration:+t.duration||60,color:t.color||'#1F8CFF',visible:t.visible!==false,active:t.active!==false}));}
+    const coachIdFor=name=>coaches.find(c=>c.name===name)?.id||coaches[0].id;
+    const typeIds=new Set(next.classTypes.map(t=>t.id));
+    next.sessions=(legacy.sessions||[]).map((item,i)=>({
+      id:item.id||`legacy_session_${i+1}`,
+      classTypeId:typeIds.has(item.classTypeId)?item.classTypeId:next.classTypes[0]?.id,
+      kind:item.kind||'Group',
+      date:item.date||legacyDate(item.day||'Mon',item.weekOffset||0),
+      time:item.time||'06:00',
+      coachId:item.coachId||coachIdFor(item.coach||'Jordan'),
+      capacity:+item.capacity||((item.kind==='1-on-1')?1:(item.kind==='Semi-Private'?4:10)),
+      durationMinutes:+item.durationMinutes||(+next.classTypes.find(t=>t.id===item.classTypeId)?.duration||60),
+      status:item.status||'active',notes:item.notes||'',repeatWeeks:0,repeatDays:[],createdAt:item.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()
+    }));
+    next.clients=(legacy.clients||[]).map((c,i)=>({id:c.id||`legacy_client_${i+1}`,name:c.name||'',email:c.email||'',phone:c.phone||'',package:c.package||'Unassigned',chargeDate:c.chargeDate||'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}));
+    const sessionIds=new Set(next.sessions.map(x=>x.id));
+    for(const b of legacy.bookings||[]){
+      let clientId=b.clientId;
+      let c=next.clients.find(x=>x.id===clientId) || next.clients.find(x=>b.email&&x.email===b.email);
+      if(!c){c={id:uid(),name:b.name||'Client',email:b.email||'',phone:b.phone||'',package:'Unassigned',chargeDate:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};next.clients.push(c)}
+      if(sessionIds.has(b.sessionId))next.bookings.push({id:b.id||uid(),sessionId:b.sessionId,clientId:c.id,status:b.status||'approved',createdAt:b.createdAt||new Date().toISOString()});
+    }
+    return next;
+  }
+  async function migrateLegacyIfNeeded(server){
+    const migrationFlag='tf_scheduler_v22_legacy_migrated';
+    if(sessionStorage.getItem(migrationFlag)) return server;
+    const raw=localStorage.getItem('tf_scheduler_v5');
+    if(!raw || server.revision!==1 || server.sessions.length || server.clients.length || server.bookings.length || server.requests.length) return server;
+    try{
+      const legacy=JSON.parse(raw);
+      if(!Array.isArray(legacy.sessions)&&!Array.isArray(legacy.classTypes)) return server;
+      const imported=convertLegacyState(legacy,server);
+      const r=await api('',{method:'POST',body:JSON.stringify({action:'save',state:imported,baseRevision:server.revision,reason:'legacy v21 browser migration'})});
+      sessionStorage.setItem(migrationFlag,'1');
+      toast('Legacy schedule imported into secure server storage.');
+      return r.state;
+    }catch(e){console.warn('Legacy migration skipped',e);return server}
+  }
+  function renderLogin(){root.innerHTML=`<section class="login"><div class="login-card"><div class="mark">TF</div><div class="eyebrow" style="margin-top:15px">Private staff access</div><h1>Scheduling Command Center</h1><p class="login-copy">Coach/Admin access controls schedules, clients, availability, requests, backups, and company views. Client access is separate and request-only.</p><div class="field"><label>Coach/Admin PIN</label><input id="pinInput" type="password" autocomplete="current-password" placeholder="Enter access PIN"></div><div class="login-actions"><button class="btn primary" id="loginBtn">Coach/Admin Login</button><a class="btn ghost" href="?live=1">Client Live Feed</a></div><p class="server-note">Protected server storage · automatic backups · shared live schedule</p></div></section>`;document.getElementById('loginBtn').onclick=login;document.getElementById('pinInput').addEventListener('keydown',e=>{if(e.key==='Enter')login()})}
+  async function login(){
+    const pin=document.getElementById('pinInput').value;
+    const button=document.getElementById('loginBtn');
+    if(button){button.disabled=true;button.textContent='Signing in…'}
+    try{
+      const r=await api('',{method:'POST',body:JSON.stringify({action:'login',pin})});
+      token=r.token;sessionStorage.setItem('tf_scheduler_admin_token',token);
+      state=await migrateLegacyIfNeeded(r.state);
+      activeCoachId=state.coaches[0]?.id||'jordan';mode='coach';startPolling();render();toast('Coach workspace unlocked.');
+    }catch(e){
+      toast(e.message||'Unable to sign in.','error');
+    }finally{
+      const current=document.getElementById('loginBtn');
+      if(current){current.disabled=false;current.textContent='Coach/Admin Login'}
+    }
+  }
+  function sidebar(){const current=coach(activeCoachId)||activeCoaches()[0];const classes=(state.classTypes||[]).filter(t=>t.active!==false);return `<aside class="panel"><div class="panel-pad"><div class="stats"><div class="stat"><b>${(state.sessions||[]).filter(s=>s.date>=dateFor(weekStart,0)&&s.date<=dateFor(weekStart,4)).length}</b><small>This week</small></div><div class="stat"><b>${(state.requests||[]).filter(r=>r.status==='requested').length}</b><small>Requests</small></div></div><div class="field"><label>Active Coach</label><select id="coachSelect">${activeCoaches().map(c=>`<option value="${esc(c.id)}" ${c.id===current?.id?'selected':''}>${esc(c.name)} · ${esc(c.role)}</option>`).join('')}</select></div><div class="section-title"><h2>Class Types</h2><span>Drag to schedule</span></div><div class="class-type-grid">${classes.map(t=>`<button class="type-card" draggable="true" data-type="${esc(t.id)}" style="--type:${esc(t.color)};--type-glow:${esc(t.color+'44')}"><button class="type-edit" data-edit-type="${esc(t.id)}" title="Edit class type">✎</button><strong>${esc(t.name)}</strong><small>${esc(t.intensity||'Training')}</small></button>`).join('')}<button class="type-card" id="newTypeBtn" style="--type:#64B4FF;--type-glow:#64B4FF44"><strong>+ New Type</strong><small>Create a custom class type</small></button></div><div class="divider"></div><div class="section-title"><h2>Recent Requests</h2><span>server synced</span></div><div class="recent-list">${(state.requests||[]).filter(r=>r.status==='requested').slice(0,4).map(r=>`<div class="recent"><b>${esc(r.client?.name||r.name||'Client')}</b><p>${esc(r.date||'Requested time')} ${r.time?`· ${prettyTime(r.time)}`:''}<br>${esc(r.kind||'Session')} request</p></div>`).join('')||'<div class="empty">No pending requests.</div>'}</div></div></aside>`}
+  function weekCalendar(){
+    const dates=DAYS.map((_,i)=>dateFor(weekStart,i));
+    let html=`<div class="calendar-header"><div><div class="calendar-title">${prettyDate(dates[0])} — ${prettyDate(dates[4])}</div><div class="calendar-subtitle">Drag a class type to an available block, or click an available block to create a session.</div></div><div class="top-actions"><button class="btn ghost" data-week="-1">← Week</button><button class="btn ghost" data-week="0">This Week</button><button class="btn ghost" data-week="1">Week →</button></div></div><div class="calendar-shell"><section class="week-calendar"><div class="cal-head">Time</div>${dates.map((d,i)=>`<div class="cal-head">${DAYS[i]}<small>${new Date(d+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}</small></div>`).join('')}`;
+    for(const time of TIMES){html+=`<div class="time-cell">${prettyTime(time)}</div>`;for(const date of dates){const ss=sessionsAt(date,time,activeCoachId);const available=isAvailable(activeCoachId,date,time);html+=`<div class="day-cell ${available?'available':''}" data-slot-date="${date}" data-slot-time="${time}">${ss.map(s=>tile(s,'coach')).join('')}</div>`}}
+    return html+'</section></div>';
+  }
+  function liveCalendar(){
+    const dates=DAYS.map((_,i)=>dateFor(weekStart,i));
+    let html=`<div class="calendar-header"><div><div class="calendar-title">Live availability</div><div class="calendar-subtitle">Request a listed session or any available time. A coach approves all requests.</div></div><div class="top-actions"><button class="btn ghost" data-week="-1">← Week</button><button class="btn ghost" data-week="0">This Week</button><button class="btn ghost" data-week="1">Week →</button></div></div><div class="calendar-shell live"><section class="week-calendar"><div class="cal-head">Time</div>${dates.map((d,i)=>`<div class="cal-head">${DAYS[i]}<small>${new Date(d+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}</small></div>`).join('')}`;
+    for(const time of TIMES){html+=`<div class="time-cell">${prettyTime(time)}</div>`;for(const date of dates){const publicSessions=(state.sessions||[]).filter(s=>s.date===date&&s.time===time&&s.status==='active'&&type(s.classTypeId).visible);const anyAvail=activeCoaches().some(c=>isAvailable(c.id,date,time));html+=`<div class="day-cell ${anyAvail?'available':''}" data-public-date="${date}" data-public-time="${time}">${publicSessions.map(s=>tile(s,'live')).join('')}${anyAvail&&!publicSessions.length?'<button class="slot-request">Request this time</button>':''}</div>`}}
+    return html+'</section></div>';
+  }
+  function gymCalendar(){
+    const active=activeCoaches();let html=`<div class="gym-top"><div><div class="calendar-title">${prettyDate(gymDate)}</div><div class="calendar-subtitle">Live staff schedule · company view</div></div><div class="top-actions"><button class="btn ghost" data-gym-day="-1">← Day</button><button class="btn ghost" data-gym-today="1">Today</button><button class="btn ghost" data-gym-day="1">Day →</button></div></div><div class="gym-grid-shell"><section class="gym-grid" style="--coach-count:${active.length}"><div class="gym-head">Time</div>${active.map(c=>`<div class="gym-head"><b>${esc(c.name)}</b><small>${esc(c.role)}</small></div>`).join('')}`;
+    for(const tm of TIMES){html+=`<div class="gym-time">${prettyTime(tm)}</div>`;for(const c of active){const ss=sessionsAt(gymDate,tm,c.id);html+=`<div class="gym-slot ${isAvailable(c.id,gymDate,tm)?'available':''}">${ss.map(s=>tile(s,'gym')).join('')}</div>`}}
+    return html+'</section></div>';
+  }
+  function render(){if(mode==='login')return renderLogin();if(!state){root.innerHTML='<section class="login"><div class="login-card"><div class="mark">TF</div><h1>Connecting…</h1></div></section>';return}const content=mode==='coach'?`<section class="layout">${sidebar()}<main class="panel"><div class="calendar-wrap">${weekCalendar()}</div></main></section>`:mode==='live'?`<main class="panel"><div class="calendar-wrap">${liveCalendar()}</div></main>`:`<main class="panel"><div class="gym-stage">${gymCalendar()}</div></main>`;root.innerHTML=`<div class="app">${header()}${content}</div>`;bindPage()}
+  function bindPage(){
+    document.getElementById('logoutBtn')?.addEventListener('click',()=>{token='';sessionStorage.removeItem('tf_scheduler_admin_token');stopPolling();mode='login';state=null;render()});
+    document.getElementById('gymBtn')?.addEventListener('click',()=>window.open('?gym=1','_blank','noopener'));
+    document.getElementById('backupBtn')?.addEventListener('click',openBackups);
+    document.getElementById('availabilityBtn')?.addEventListener('click',openAvailability);
+    document.getElementById('coachesBtn')?.addEventListener('click',openCoaches);
+    document.getElementById('clientsBtn')?.addEventListener('click',openClients);
+    document.getElementById('requestsBtn')?.addEventListener('click',openRequests);
+    document.getElementById('coachSelect')?.addEventListener('change',e=>{activeCoachId=e.target.value;render()});
+    document.getElementById('newTypeBtn')?.addEventListener('click',()=>openType());
+    document.querySelectorAll('[data-edit-type]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openType(b.dataset.editType)}));
+    document.querySelectorAll('[data-week]').forEach(b=>b.addEventListener('click',()=>{const n=+b.dataset.week;weekStart=n===0?monday(new Date()):addDays(weekStart,n*7);render()}));
+    document.querySelectorAll('[data-gym-day]').forEach(b=>b.addEventListener('click',()=>{gymDate=iso(addDays(new Date(gymDate+'T12:00:00'),+b.dataset.gymDay));render()}));
+    document.querySelector('[data-gym-today]')?.addEventListener('click',()=>{gymDate=iso(new Date());render()});
+    document.querySelectorAll('[data-slot-date]').forEach(cell=>{cell.addEventListener('click',e=>{if(e.target.closest('.session-tile'))return;const date=cell.dataset.slotDate,time=cell.dataset.slotTime;if(isAvailable(activeCoachId,date,time))openSession({date,time,coachId:activeCoachId})});cell.addEventListener('dragover',e=>{if(isAvailable(activeCoachId,cell.dataset.slotDate,cell.dataset.slotTime)){e.preventDefault();cell.classList.add('drag-over')}});cell.addEventListener('dragleave',()=>cell.classList.remove('drag-over'));cell.addEventListener('drop',e=>{e.preventDefault();cell.classList.remove('drag-over');const payload=parseDrag(e);if(!payload)return;const date=cell.dataset.slotDate,time=cell.dataset.slotTime;if(payload.kind==='type')openSession({date,time,coachId:activeCoachId,classTypeId:payload.id});if(payload.kind==='session')moveSession(payload.id,date,time,activeCoachId)})});
+    document.querySelectorAll('[data-type]').forEach(el=>{el.addEventListener('dragstart',e=>{drag={kind:'type',id:el.dataset.type};e.dataTransfer.setData('text/plain',JSON.stringify(drag));e.dataTransfer.effectAllowed='copy'});el.addEventListener('dragend',()=>drag=null)});
+    document.querySelectorAll('.session-tile[draggable="true"]').forEach(el=>{el.addEventListener('dragstart',e=>{drag={kind:'session',id:el.dataset.session};e.dataTransfer.setData('text/plain',JSON.stringify(drag));e.dataTransfer.effectAllowed='move'});el.addEventListener('dragend',()=>drag=null);el.addEventListener('click',e=>{e.stopPropagation();openSession({sessionId:el.dataset.session})})});
+    document.querySelectorAll('.live [data-session]').forEach(el=>el.addEventListener('click',()=>openRequest({sessionId:el.dataset.session})));
+    document.querySelectorAll('[data-public-date]').forEach(cell=>{cell.querySelector('.slot-request')?.addEventListener('click',e=>{e.stopPropagation();openRequest({date:cell.dataset.publicDate,time:cell.dataset.publicTime})})});
+  }
+  function parseDrag(e){try{return JSON.parse(e.dataTransfer.getData('text/plain'))}catch{return drag}}
+  async function moveSession(id,date,time,coachId){const current=clone(state);const s=state.sessions.find(x=>x.id===id);if(!s)return;if(!isAvailable(coachId,date,time)){toast('That coach is not available at this time.');return}s.date=date;s.time=time;s.coachId=coachId;try{await commitState('Moved session.')}catch(e){state=current;render();toast(e.message,'error')}}
+  function openModal(html){modal.innerHTML=html;backdrop.classList.add('open')}function closeModal(){backdrop.classList.remove('open');modal.innerHTML=''}backdrop.addEventListener('click',e=>{if(e.target===backdrop)closeModal()});window.closeModal=closeModal;
+  function sessionDraft(existing,seed){return existing?clone(existing):{id:'',date:seed.date,time:seed.time,coachId:seed.coachId,classTypeId:seed.classTypeId||state.classTypes[0]?.id,kind:'Group',capacity:10,durationMinutes:60,status:'active',notes:'',repeatWeeks:0,repeatDays:[],createdAt:new Date().toISOString()}}
+  function openSession(opts={}){
+    const existing=opts.sessionId?state.sessions.find(s=>s.id===opts.sessionId):null;let d=sessionDraft(existing,opts);let kind=d.kind||'Group';let repeatDays=new Set(d.repeatDays||[]), repeatWeeks=+d.repeatWeeks||0;
+    const cap=k=>k==='1-on-1'?1:k==='Semi-Private'?4:10;
+    const draw=()=>{const booked=existing?clientsForSession(existing.id):[];openModal(`<div class="modal-head"><div><h2>${existing?'Edit Session':'Create Session'}</h2><p>${prettyDate(d.date)} · ${prettyTime(d.time)} · ${esc(coach(d.coachId)?.name||'Coach')}</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="modal-grid"><section class="card"><div class="field"><label>Session Format</label><div class="kind-grid">${['Group','Semi-Private','1-on-1'].map(k=>`<button class="kind-btn ${kind===k?'active':''}" data-kind="${k}">${k}<br><small>up to ${cap(k)}</small></button>`).join('')}</div></div><div class="form-two"><div class="field"><label>Class Type</label><select id="sType">${state.classTypes.map(t=>`<option value="${esc(t.id)}" ${d.classTypeId===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div><div class="field"><label>Coach</label><select id="sCoach">${activeCoaches().map(c=>`<option value="${esc(c.id)}" ${d.coachId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div></div><div class="form-three"><div class="field"><label>Date</label><input id="sDate" type="date" value="${d.date}"></div><div class="field"><label>Time</label><input id="sTime" type="time" value="${d.time}"></div><div class="field"><label>Capacity</label><input id="sCap" type="number" min="1" max="${cap(kind)}" value="${Math.min(d.capacity||cap(kind),cap(kind))}"></div></div><div class="form-two"><div class="field"><label>Duration</label><div class="stepper"><button id="durMinus">−</button><strong id="durationLabel">${d.durationMinutes||60} minutes</strong><button id="durPlus">+</button></div></div><div class="field"><label>Status</label><select id="sStatus"><option value="active" ${d.status==='active'?'selected':''}>Active</option><option value="pending" ${d.status==='pending'?'selected':''}>Pending</option><option value="canceled" ${d.status==='canceled'?'selected':''}>Canceled</option></select></div></div><div class="field"><label>Notes</label><textarea id="sNotes" rows="3" placeholder="Coach notes, setup, or public details">${esc(d.notes||'')}</textarea></div></section><section class="card"><div class="field"><label>Repeat Session</label><div class="repeat-days"><button class="repeat-btn none ${repeatWeeks===0?'active':''}" id="noRepeat">No Repeat</button><div class="stepper"><button id="weekMinus">−</button><strong id="weekLabel">${repeatWeeks||0} weeks</strong><button id="weekPlus">+</button></div><span></span></div></div><div class="field"><label>Repeat Days (enabled when repeat is set)</label><div class="repeat-days">${DAYS.map(day=>`<button class="repeat-btn ${repeatDays.has(day)?'active':''}" data-rday="${day}" ${repeatWeeks===0?'disabled':''}>${day==='Thu'?'Th':day[0]}</button>`).join('')}</div><span class="hint">Start blank. Select days after setting repeat weeks.</span></div><div class="divider"></div><div class="section-title"><h2>Booked Clients</h2><span>${booked.length}/${d.capacity||cap(kind)}</span></div><div class="booked-list">${booked.length?booked.map(c=>`<div class="booked-row"><div><b>${esc(c.name||'Client')}</b><small>${esc(c.email||'No email')} · ${esc(c.package||'Unassigned')}</small></div><button class="x-btn" data-remove-client="${esc(c.id)}" title="Remove from session">×</button></div>`).join(''):'<div class="empty">No clients booked. Approve a request or book a client from Requests.</div>'}</div></section></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button>${existing?'<button class="btn danger" id="deleteSession">Delete</button><button class="btn warn" id="duplicateSession">Duplicate</button>':''}<button class="btn primary" id="saveSession">${existing?'Save Changes':'Create Session'}</button></div>`);
+      modal.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{capture();kind=b.dataset.kind;d.capacity=cap(kind);draw()});modal.querySelectorAll('[data-rday]').forEach(b=>b.onclick=()=>{capture();repeatDays.has(b.dataset.rday)?repeatDays.delete(b.dataset.rday):repeatDays.add(b.dataset.rday);draw()});
+      document.getElementById('noRepeat').onclick=()=>{capture();repeatWeeks=0;repeatDays.clear();draw()};document.getElementById('weekMinus').onclick=()=>{capture();repeatWeeks=Math.max(0,repeatWeeks-1);draw()};document.getElementById('weekPlus').onclick=()=>{capture();repeatWeeks=Math.min(52,repeatWeeks+1);draw()};document.getElementById('durMinus').onclick=()=>{capture();d.durationMinutes=Math.max(30,(d.durationMinutes||60)-15);draw()};document.getElementById('durPlus').onclick=()=>{capture();d.durationMinutes=Math.min(240,(d.durationMinutes||60)+15);draw()};
+      document.getElementById('saveSession').onclick=saveDraft;document.getElementById('deleteSession')?.addEventListener('click',async()=>{if(!confirm('Delete this session?'))return;await commit(mut=>{mut.sessions=mut.sessions.filter(s=>s.id!==existing.id);mut.bookings=mut.bookings.filter(b=>b.sessionId!==existing.id)},'Session deleted.');closeModal()});document.getElementById('duplicateSession')?.addEventListener('click',async()=>{capture();const n={...d,id:uid(),time:d.time,createdAt:new Date().toISOString(),repeatWeeks:0,repeatDays:[]};await commit(mut=>{mut.sessions.push(n)},'Session duplicated.');closeModal()});modal.querySelectorAll('[data-remove-client]').forEach(b=>b.onclick=async()=>{const clientId=b.dataset.removeClient;await commit(mut=>{mut.bookings=mut.bookings.filter(x=>!(x.sessionId===existing.id&&x.clientId===clientId))},'Client removed from session.');draw()});
+    };
+    function capture(){const g=id=>document.getElementById(id);if(!g('sType'))return;d={...d,classTypeId:g('sType').value,coachId:g('sCoach').value,date:g('sDate').value,time:g('sTime').value,capacity:+g('sCap').value,status:g('sStatus').value,notes:g('sNotes').value,durationMinutes:d.durationMinutes||60}}
+    async function saveDraft(){
+      capture();
+      d.kind=kind;
+      d.capacity=Math.min(Math.max(1,d.capacity||cap(kind)),cap(kind));
+      d.repeatWeeks=repeatWeeks;
+      d.repeatDays=[...repeatDays];
+      if(!isAvailable(d.coachId,d.date,d.time)&&!confirm('This time is not marked available for the selected coach. Save anyway?')) return;
+      await commit(mut=>{
+        if(existing){
+          const target=mut.sessions.find(s=>s.id===existing.id);
+          if(target) Object.assign(target,d);
+        } else {
+          d.id=uid();
+          mut.sessions.push(clone(d));
+        }
+        if(repeatWeeks>0 && repeatDays.size){
+          for(let wk=0; wk<repeatWeeks; wk++){
+            for(const weekday of repeatDays){
+              const base=new Date(d.date+'T12:00:00');
+              const targetIndex=DAYS.indexOf(weekday);
+              const baseIndex=DAYS.indexOf(dayName(d.date));
+              const delta=(targetIndex-baseIndex)+(wk*7);
+              if(delta<=0) continue;
+              const repeatDate=iso(addDays(base,delta));
+              const exists=mut.sessions.some(s=>s.date===repeatDate&&s.time===d.time&&s.coachId===d.coachId&&s.classTypeId===d.classTypeId);
+              if(!exists){
+                mut.sessions.push({...clone(d),id:uid(),date:repeatDate,repeatWeeks:0,repeatDays:[],createdAt:new Date().toISOString()});
+              }
+            }
+          }
+        }
+      }, existing?'Session saved.':'Session created.');
+      closeModal();
+    }
+    draw();
+  }
+  async function openRequest(seed={}){
+    const existing=seed.sessionId?(state.sessions||[]).find(s=>s.id===seed.sessionId):null;let kind=existing?.kind||'Group';const date=existing?.date||seed.date,time=existing?.time||seed.time, coachId=existing?.coachId||activeCoaches().find(c=>isAvailable(c.id,date,time))?.id||activeCoaches()[0]?.id;
+    openModal(`<div class="modal-head"><div><h2>Request Booking</h2><p>${prettyDate(date)} · ${prettyTime(time)} · ${esc(coach(coachId)?.name||'Coach')} · Approval required</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="modal-grid"><section class="card"><div class="field"><label>Your name</label><input id="rqName" placeholder="Full name"></div><div class="field"><label>Email</label><input id="rqEmail" type="email" placeholder="you@email.com"></div><div class="field"><label>Phone (optional)</label><input id="rqPhone" placeholder="Phone"></div></section><section class="card"><div class="field"><label>Requested format</label><div class="kind-grid">${['Group','Semi-Private','1-on-1'].map(k=>`<button class="kind-btn ${kind===k?'active':''}" data-rq-kind="${k}">${k}</button>`).join('')}</div></div><div class="field"><label>Note (optional)</label><textarea id="rqNotes" rows="4" placeholder="Anything the coach should know?"></textarea></div><p class="hint">This submits a request only. A coach reviews it before your booking is confirmed.</p></section></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" id="submitRequest">Submit Request</button></div>`);
+    modal.querySelectorAll('[data-rq-kind]').forEach(b=>b.onclick=()=>{kind=b.dataset.rqKind;modal.querySelectorAll('[data-rq-kind]').forEach(x=>x.classList.toggle('active',x===b))});
+    document.getElementById('submitRequest').onclick=async()=>{const name=document.getElementById('rqName').value.trim(),email=document.getElementById('rqEmail').value.trim(),phone=document.getElementById('rqPhone').value.trim(),notes=document.getElementById('rqNotes').value.trim();if(!name||!email){toast('Name and email are required.');return}try{await api('',{method:'POST',body:JSON.stringify({action:'request',request:{name,email,phone,notes,sessionId:existing?.id||'',date,time,coachId,kind}})});closeModal();toast('Request submitted. A coach will review it.')}catch(e){toast(e.message,'error')}};
+  }
+  async function openRequests(){
+    const requests=(state.requests||[]).filter(r=>r.status==='requested');openModal(`<div class="modal-head"><div><h2>Booking Requests</h2><p>Server-synced requests from the client live feed.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="request-list">${requests.length?requests.map(r=>`<article class="request-row"><div><b>${esc(r.client?.name||r.name||'Client')}</b><p>${esc(r.client?.email||r.email||'No email')} ${r.client?.phone||r.phone?`· ${esc(r.client?.phone||r.phone)}`:''}<br>${prettyDate(r.date)} · ${prettyTime(r.time)} · ${esc(coach(r.coachId)?.name||'Coach')} · ${esc(r.kind||'Group')}<br>${r.notes?esc(r.notes):'No note'} · ${fmtDateTime(r.createdAt)}</p></div><div class="request-actions"><button class="btn success" data-approve-request="${esc(r.id)}">Approve</button><button class="x-btn" data-decline-request="${esc(r.id)}" title="Decline">×</button></div></article>`).join(''):'<div class="empty">No pending requests.</div>'}</div>`);
+    modal.querySelectorAll('[data-approve-request]').forEach(b=>b.onclick=()=>approveRequest(b.dataset.approveRequest));modal.querySelectorAll('[data-decline-request]').forEach(b=>b.onclick=async()=>{await commit(mut=>{const r=mut.requests.find(x=>x.id===b.dataset.declineRequest);if(r)r.status='declined'},'Request declined.');openRequests()});
+  }
+  async function approveRequest(id){await commit(mut=>{const r=mut.requests.find(x=>x.id===id);if(!r)return;let client=mut.clients.find(c=>(c.email||'').toLowerCase()===(r.client?.email||r.email||'').toLowerCase());if(!client){client={id:uid(),name:r.client?.name||r.name||'Client',email:r.client?.email||r.email||'',phone:r.client?.phone||r.phone||'',package:'Unassigned',chargeDate:''};mut.clients.push(client)}let session=mut.sessions.find(s=>s.id===r.sessionId);if(!session){session={id:uid(),classTypeId:mut.classTypes[0]?.id,kind:r.kind||'Group',date:r.date,time:r.time,coachId:r.coachId,capacity:r.kind==='1-on-1'?1:r.kind==='Semi-Private'?4:10,durationMinutes:60,status:'active',notes:'Created from booking request',repeatWeeks:0,repeatDays:[],createdAt:new Date().toISOString()};mut.sessions.push(session)}if(!mut.bookings.some(b=>b.sessionId===session.id&&b.clientId===client.id)){mut.bookings.push({id:uid(),sessionId:session.id,clientId:client.id,status:'approved',createdAt:new Date().toISOString()})}r.status='approved';r.reviewedAt=new Date().toISOString()},'Request approved and client booked.');openRequests()}
+  function openType(id){const existing=id?state.classTypes.find(t=>t.id===id):null;const d=existing?clone(existing):{id:'',name:'',intensity:'Training',desc:'',duration:60,color:'#1F8CFF',visible:true,active:true};openModal(`<div class="modal-head"><div><h2>${existing?'Edit Class Type':'New Class Type'}</h2><p>Class types appear in the coach grid and public schedule.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="modal-grid"><section class="card"><div class="field"><label>Name</label><input id="tName" value="${esc(d.name)}" placeholder="Class name"></div><div class="field"><label>Intensity / label</label><input id="tIntensity" value="${esc(d.intensity)}" placeholder="Strength, Conditioning, etc."></div><div class="field"><label>Default duration</label><input id="tDuration" type="number" min="30" max="240" step="15" value="${d.duration||60}"></div></section><section class="card"><div class="field"><label>Accent color</label><input id="tColor" type="color" value="${esc(d.color||'#1F8CFF')}"></div><div class="field"><label>Description</label><textarea id="tDesc" rows="3">${esc(d.desc||'')}</textarea></div><label class="pill" style="justify-content:flex-start"><input id="tVisible" type="checkbox" ${d.visible!==false?'checked':''}> Visible on public live schedule</label></section></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button>${existing?'<button class="btn danger" id="deleteType">Delete</button>':''}<button class="btn primary" id="saveType">Save Type</button></div>`);document.getElementById('saveType').onclick=async()=>{const next={...d,id:d.id||uid(),name:document.getElementById('tName').value.trim(),intensity:document.getElementById('tIntensity').value.trim(),duration:+document.getElementById('tDuration').value||60,color:document.getElementById('tColor').value,desc:document.getElementById('tDesc').value.trim(),visible:document.getElementById('tVisible').checked,active:true};if(!next.name){toast('Class type name is required.');return}await commit(mut=>{if(existing)Object.assign(mut.classTypes.find(t=>t.id===existing.id),next);else mut.classTypes.push(next)},'Class type saved.');closeModal()};document.getElementById('deleteType')?.addEventListener('click',async()=>{if(!confirm('Delete this class type? Existing sessions will keep their title until reassigned.'))return;await commit(mut=>{mut.classTypes=mut.classTypes.filter(t=>t.id!==existing.id)},'Class type deleted.');closeModal()})}
+  function openAvailability(){
+    let coachId=activeCoachId;
+    const draftAvailability=clone(state.availability);
+    const draw=()=>{
+      const c=coach(coachId);
+      openModal(`<div class="modal-head"><div><h2>Coach Availability</h2><p>Click cells to mark repeating weekly availability. Changes save only when you press Save Availability.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="field"><label>Coach / manager</label><select id="avCoach">${activeCoaches().map(x=>`<option value="${esc(x.id)}" ${x.id===coachId?'selected':''}>${esc(x.name)} · ${esc(x.role)}</option>`).join('')}</select></div><div class="calendar-shell"><section class="week-calendar"><div class="cal-head">Time</div>${DAYS.map(d=>`<div class="cal-head">${d}</div>`).join('')}${TIMES.map(tm=>`<div class="time-cell">${prettyTime(tm)}</div>${DAYS.map(day=>`<button class="day-cell ${draftAvailability?.[coachId]?.[day]?.[tm]?'available':''}" data-av-day="${day}" data-av-time="${tm}"></button>`).join('')}`).join('')}</section></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Close</button><button class="btn primary" id="saveAvailability">Save Availability</button></div>`);
+      document.getElementById('avCoach').onchange=e=>{coachId=e.target.value;draw()};
+      modal.querySelectorAll('[data-av-day]').forEach(b=>b.onclick=()=>{const d=b.dataset.avDay,t=b.dataset.avTime;draftAvailability[coachId]??={};draftAvailability[coachId][d]??={};draftAvailability[coachId][d][t]=!draftAvailability[coachId][d][t];b.classList.toggle('available',draftAvailability[coachId][d][t])});
+      document.getElementById('saveAvailability').onclick=async()=>{await commit(mut=>{mut.availability=clone(draftAvailability)},'Availability saved.');closeModal()}
+    };
+    draw();
+  }
+  function openCoaches(){
+    const draftCoaches=clone(state.coaches);
+    const draftAvailability=clone(state.availability);
+    const draw=()=>{
+      openModal(`<div class="modal-head"><div><h2>Coaches & Managers</h2><p>Each team member needs availability before their schedule is used.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="client-table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Active</th><th></th></tr></thead><tbody>${draftCoaches.map(c=>`<tr data-coach-row="${esc(c.id)}"><td><input data-coach-name value="${esc(c.name)}"></td><td><select data-coach-role><option ${c.role==='Admin / Coach'?'selected':''}>Admin / Coach</option><option ${c.role==='Coach'?'selected':''}>Coach</option><option ${c.role==='Manager'?'selected':''}>Manager</option></select></td><td><input type="checkbox" data-coach-active ${c.active!==false?'checked':''}></td><td>${c.id==='jordan'?'':`<button class="x-btn" data-coach-delete="${esc(c.id)}">×</button>`}</td></tr>`).join('')}</tbody></table></div><div class="modal-actions"><button class="btn" id="addCoach">+ Coach</button><button class="btn" onclick="closeModal()">Close</button><button class="btn primary" id="saveCoaches">Save Team</button></div>`);
+      document.getElementById('addCoach').onclick=()=>{const next={id:uid(),name:'New Coach',role:'Coach',active:true};draftCoaches.push(next);draftAvailability[next.id]={Mon:{},Tue:{},Wed:{},Thu:{},Fri:{}};draw()};
+      modal.querySelectorAll('[data-coach-delete]').forEach(b=>b.onclick=()=>{const index=draftCoaches.findIndex(c=>c.id===b.dataset.coachDelete);if(index>=0){const [removed]=draftCoaches.splice(index,1);delete draftAvailability[removed.id];draw()}});
+      document.getElementById('saveCoaches').onclick=async()=>{
+        modal.querySelectorAll('[data-coach-row]').forEach(tr=>{const c=draftCoaches.find(x=>x.id===tr.dataset.coachRow);if(c){c.name=tr.querySelector('[data-coach-name]').value.trim()||c.name;c.role=tr.querySelector('[data-coach-role]').value;c.active=tr.querySelector('[data-coach-active]').checked}});
+        await commit(mut=>{mut.coaches=clone(draftCoaches);mut.availability=clone(draftAvailability)},'Team saved.');
+        closeModal();
+      }
+    };
+    draw();
+  }
+  function openClients(){
+    const draftClients=clone(state.clients||[]);
+    let q='';
+    const importDraft=txt=>{
+      const lines=txt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+      if(!lines.length)return{added:0,updated:0};
+      const delim=lines[0].includes('\t')?'\t':lines[0].includes('|')?'|':',';
+      const rows=lines.map(x=>x.split(delim).map(y=>y.trim()));
+      const header=rows[0].map(x=>x.toLowerCase());
+      const has=header.some(x=>/name|email|phone/.test(x));
+      const startRow=has?1:0;
+      const idx=n=>has?Math.max(0,header.findIndex(x=>x.includes(n))):n==='name'?0:n==='email'?1:n==='phone'?2:n==='package'?3:4;
+      let added=0,updated=0;
+      for(let i=startRow;i<rows.length;i++){
+        const r=rows[i];const entry={name:r[idx('name')]||'',email:r[idx('email')]||'',phone:r[idx('phone')]||'',package:r[idx('package')]||'Unassigned',chargeDate:r[idx('charge')]||''};
+        if(!entry.name&&!entry.email)continue;
+        const match=draftClients.find(x=>entry.email&&x.email.toLowerCase()===entry.email.toLowerCase());
+        if(match){Object.assign(match,{...match,...entry});updated++}else{draftClients.push({id:uid(),...entry});added++}
+      }
+      return{added,updated};
+    };
+    const draw=()=>{
+      const list=draftClients.filter(c=>[c.name,c.email,c.phone,c.package,c.chargeDate].join(' ').toLowerCase().includes(q.toLowerCase()));
+      openModal(`<div class="modal-head"><div><h2>Client Management</h2><p>Private server-stored client records used for bookings only.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="client-toolbar"><input class="search" id="clientSearch" placeholder="Search client records" value="${esc(q)}"><button class="btn" id="importClientBtn">Import TXT / CSV</button><button class="btn" id="addClientBtn">+ Client</button></div><div class="dropzone" id="clientDrop"><b>Drop client TXT/CSV here</b><span>Columns: name, email, phone, package, charge date.</span><input id="clientFile" type="file" accept=".txt,.csv,text/plain" class="hidden"></div><div class="client-table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Package</th><th>Charge date</th><th></th></tr></thead><tbody>${list.map(c=>`<tr data-client-row="${esc(c.id)}"><td><input data-c="name" value="${esc(c.name)}"></td><td><input data-c="email" value="${esc(c.email)}"></td><td><input data-c="phone" value="${esc(c.phone)}"></td><td><input data-c="package" value="${esc(c.package||'Unassigned')}"></td><td><input data-c="chargeDate" type="date" value="${esc(c.chargeDate||'')}"></td><td><button class="x-btn" data-client-del="${esc(c.id)}">×</button></td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">No clients found.</div></td></tr>'}</tbody></table></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Close</button><button class="btn ghost" id="exportClientsBtn">Export Clients</button><button class="btn primary" id="saveClientsBtn">Save Clients</button></div>`);
+      modal.querySelectorAll('[data-c]').forEach(inp=>inp.oninput=()=>{const c=draftClients.find(x=>x.id===inp.closest('[data-client-row]').dataset.clientRow);if(c)c[inp.dataset.c]=inp.value});
+      document.getElementById('clientSearch').oninput=e=>{q=e.target.value;draw()};
+      document.getElementById('addClientBtn').onclick=()=>{draftClients.push({id:uid(),name:'New Client',email:'',phone:'',package:'Unassigned',chargeDate:''});draw()};
+      modal.querySelectorAll('[data-client-del]').forEach(b=>b.onclick=()=>{const i=draftClients.findIndex(c=>c.id===b.dataset.clientDel);if(i>=0)draftClients.splice(i,1);draw()});
+      document.getElementById('exportClientsBtn').onclick=()=>download('tf-clients.json',{exportedAt:new Date().toISOString(),clients:draftClients});
+      document.getElementById('importClientBtn').onclick=()=>document.getElementById('clientFile').click();
+      const consume=file=>file.text().then(txt=>{const r=importDraft(txt);toast(`Imported ${r.added} new / ${r.updated} updated clients.`);draw()});
+      document.getElementById('clientFile').onchange=e=>e.target.files[0]&&consume(e.target.files[0]);
+      const dz=document.getElementById('clientDrop');
+      ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag')}));
+      ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag')}));
+      dz.addEventListener('drop',e=>e.dataTransfer.files[0]&&consume(e.dataTransfer.files[0]));
+      document.getElementById('saveClientsBtn').onclick=async()=>{await commit(mut=>{mut.clients=clone(draftClients)},'Client records saved.');closeModal()}
+    };
+    draw();
+  }
+  function importClients(txt){const lines=txt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!lines.length)return{added:0,updated:0};const delim=lines[0].includes('\t')?'\t':lines[0].includes('|')?'|':',';const rows=lines.map(x=>x.split(delim).map(y=>y.trim()));const header=rows[0].map(x=>x.toLowerCase());const has=header.some(x=>/name|email|phone/.test(x));let start=has?1:0;const idx=n=>has?Math.max(0,header.findIndex(x=>x.includes(n))):n==='name'?0:n==='email'?1:n==='phone'?2:n==='package'?3:4;let added=0,updated=0;for(let i=start;i<rows.length;i++){const r=rows[i];const entry={name:r[idx('name')]||'',email:r[idx('email')]||'',phone:r[idx('phone')]||'',package:r[idx('package')]||'Unassigned',chargeDate:r[idx('charge')]||''};if(!entry.name&&!entry.email)continue;let c=state.clients.find(x=>entry.email&&x.email.toLowerCase()===entry.email.toLowerCase());if(c){Object.assign(c,{...c,...entry});updated++}else{state.clients.push({id:uid(),...entry});added++}}return{added,updated}}
+  async function openBackups(){let data;try{data=await api('?scope=backups')}catch(e){toast(e.message,'error');return}const list=data.backups||[];openModal(`<div class="modal-head"><div><h2>Backups & Export</h2><p>Every server save creates a recoverable snapshot. Download a full backup before major upgrades.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="modal-grid"><section class="card"><div class="section-title"><h2>Full Export</h2><span>portable JSON</span></div><p class="hint">Contains sessions, class types, coaches, availability, clients, bookings, and requests.</p><div class="modal-actions" style="justify-content:flex-start"><button class="btn primary" id="downloadBackup">Download Full Backup</button><button class="btn" id="uploadBackup">Restore from File</button><input id="backupFile" type="file" accept="application/json,.json" class="hidden"></div></section><section class="card"><div class="section-title"><h2>Automatic Server Snapshots</h2><span>latest ${list.length}</span></div><div class="backup-list">${list.length?list.map(x=>`<div class="backup-row"><div><b>Revision ${x.revision}</b><small>${fmtDateTime(x.createdAt)} · ${esc(x.reason||'state save')}</small></div><button class="btn ghost" data-restore="${esc(x.id)}">Restore</button></div>`).join(''):'<div class="empty">Snapshots appear after the first save.</div>'}</div></section></div>`);document.getElementById('downloadBackup').onclick=()=>download(`tf-scheduler-backup-${iso(new Date())}.json`,{schema:'tf-scheduler-backup-v1',exportedAt:new Date().toISOString(),state});document.getElementById('uploadBackup').onclick=()=>document.getElementById('backupFile').click();document.getElementById('backupFile').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(async txt=>{try{const obj=JSON.parse(txt);if(!obj.state||!confirm('Restore this full backup? Current state will be snapshotted first.'))return;const r=await api('',{method:'POST',body:JSON.stringify({action:'restore',state:obj.state})});state=r.state;render();closeModal();toast('Backup restored securely.')}catch(err){toast('That backup file could not be restored.','error')}})};modal.querySelectorAll('[data-restore]').forEach(b=>b.onclick=async()=>{if(!confirm('Restore this server snapshot? Current state will be snapshotted first.'))return;try{const r=await api('',{method:'POST',body:JSON.stringify({action:'restore-backup',backupId:b.dataset.restore})});state=r.state;render();closeModal();toast('Server snapshot restored.')}catch(e){toast(e.message,'error')}})}
+  function download(name,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+  async function commit(mutator,message){const before=clone(state);mutator(state);try{await commitState(message)}catch(e){if(!(e.status===409&&e.data?.state)){state=before;render()}throw e}}
+  async function commitState(message){if(saving)throw new Error('A previous change is still saving.');saving=true;render();try{const r=await api('',{method:'POST',body:JSON.stringify({action:'save',state,baseRevision:state.revision,reason:message})});state=r.state;state.updatedAt=r.state.updatedAt;toast(message)}catch(e){if(e.status===409&&e.data?.state){state=e.data.state;toast('A newer version was found. Reloaded server changes; try again.','error')}throw e}finally{saving=false;render()}}
+  function renderConnectionError(error){
+    const detail=error?.message||'The shared schedule service is unavailable.';
+    root.innerHTML=`<section class="login"><div class="login-card"><div class="mark">TF</div><div class="eyebrow" style="margin-top:15px">Schedule connection</div><h1>Unable to load the live schedule</h1><p class="login-copy">${esc(detail)} Please refresh in a moment. The coach portal and public feeds use the same server-backed schedule.</p><div class="login-actions"><button class="btn primary" id="retryLoad">Retry</button><a class="btn ghost" href="index.html">Coach Sign In</a></div></div></section>`;
+    document.getElementById('retryLoad')?.addEventListener('click',()=>{root.innerHTML='<section class="login"><div class="login-card"><div class="mark">TF</div><h1>Connecting…</h1></div></section>';fetchState()});
+  }
+  async function fetchState(){
+    try{
+      const scope=mode==='coach'?'admin':'public';
+      const r=await api(`?scope=${scope}`);
+      const incoming=r.state;
+      if(!incoming) throw new Error('The scheduler service returned no schedule data.');
+      if(!state||incoming.revision!==state.revision){state=incoming;render()}
+      return true;
+    }catch(e){
+      if(mode==='coach'&&e.status===401){
+        token='';
+        sessionStorage.removeItem('tf_scheduler_admin_token');
+        mode='login';
+        state=null;
+        render();
+      } else {
+        console.warn('Scheduler state could not load.',e);
+        if(!state) renderConnectionError(e);
+      }
+      return false;
+    }
+  }
+  function startPolling(){stopPolling();poller=setInterval(fetchState,mode==='coach'?3500:3000)}function stopPolling(){if(poller)clearInterval(poller);poller=null}
+  async function boot(){
+    if(mode==='login'){renderLogin();return}
+    const loaded=await fetchState();
+    if(loaded) startPolling();
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
