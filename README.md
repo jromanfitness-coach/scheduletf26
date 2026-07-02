@@ -68,7 +68,6 @@ When editing an existing session, select **+ Add Client** in the Booked Clients 
 - Excel files are generated locally in the browser from the already server-synced schedule state. The exporter loads the ExcelJS browser bundle only when you click an Excel export button; no Netlify environment-variable or server setup changes are required.
 
 
-## v29 Session hover + multi-client selection
-- Hovering a session tile now shows a compact floating session preview with the format, time, duration, coach, capacity, booked clients, attendance summary, and notes for coaches. Public views only show non-private session/capacity details.
-- The Session Client Portal now supports multi-select. Choose several clients, then use **Add Selected** once to add them together while respecting the session’s remaining capacity.
-- This update only changes `index.html`; no Netlify Functions, Blobs configuration, or environment variables changed.
+## v29 updates
+- Hover a coach session for a compact session inspector.
+- Select multiple clients in the Client Portal, then add them all at once.
