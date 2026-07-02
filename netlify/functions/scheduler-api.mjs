@@ -49,7 +49,7 @@ function defaultState() {
     revision: 1,
     createdAt,
     updatedAt: createdAt,
-    coaches: [{ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true }],
+    coaches: [{ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0 }],
     availability: { jordan: defaultAvailability() },
     classTypes: [
       { id: 'forge1', name: 'Forge 1', intensity: 'Strength', desc: 'Strength-focused coaching.', duration: 60, color: '#1F8CFF', visible: true, active: true },
@@ -86,9 +86,10 @@ function normalizeState(raw, previous = defaultState()) {
     id: safeString(c.id, 80) || `coach_${index + 1}`,
     name: safeString(c.name, 100) || `Coach ${index + 1}`,
     role: ['Admin / Coach','Coach','Manager'].includes(c.role) ? c.role : 'Coach',
-    active: c.active !== false
+    active: c.active !== false,
+    payRate: clamp(c.payRate, 0, 10000, 0)
   })) : previous.coaches;
-  if (!coaches.some(c => c.id === 'jordan')) coaches.unshift({ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true });
+  if (!coaches.some(c => c.id === 'jordan')) coaches.unshift({ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0 });
 
   const coachIds = new Set(coaches.map(c => c.id));
   const availability = normalizeAvailability(source.availability);
@@ -140,6 +141,8 @@ function normalizeState(raw, previous = defaultState()) {
     sessionId: safeString(b.sessionId, 100),
     clientId: safeString(b.clientId, 100),
     status: ['approved','confirmed','cancelled'].includes(b.status) ? b.status : 'approved',
+    attendance: ['unmarked','present','late','absent','excused'].includes(b.attendance) ? b.attendance : 'unmarked',
+    attendanceMarkedAt: safeString(b.attendanceMarkedAt, 40),
     createdAt: safeString(b.createdAt, 40) || now()
   })).filter(b => sessionIds.has(b.sessionId) && clientIds.has(b.clientId));
 
