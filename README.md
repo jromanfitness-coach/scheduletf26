@@ -76,3 +76,9 @@ When editing an existing session, select **+ Add Client** in the Booked Clients 
 ## v30 client selection workflow
 
 Inside a saved session, choose **+ Add Client**. Click any client card/name area to select it green for bulk add, then use **Save Now** to add all selected clients and return to the session editor. The card-level **Add Client** button instantly books that one client while keeping the Client Portal open.
+
+
+## v31 UI updates
+
+- Client Management now uses a card-based Client Portal. Select any client card to open a private dashboard with overview, sessions, package, notes, and details.
+- Session attendance is now a click-cycle button: **Attendance → Attended → Rescheduled → Cancelled → Attendance**. The saved state continues to feed reporting exports.
