@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#05070A" />
-  <title>TF Scheduling Command Center · v28</title>
+  <title>TF Scheduling Command Center · v29</title>
   <style>
     :root{
       --bg:#05070A;--panel:rgba(13,18,26,.86);--tile:#101A26;--tile2:#0B111A;
@@ -25,6 +25,13 @@
     .booked-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.booked-heading .section-title{margin:0;display:block}.booked-heading .section-title span{display:block;margin-top:3px}.btn.compact{padding:8px 11px;font-size:11px;white-space:nowrap}.modal.client-picker-modal{width:min(1120px,calc(100vw - 36px));max-height:88vh}.client-picker-hero{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;border:1px solid rgba(100,180,255,.34);border-radius:18px;padding:14px 15px;background:linear-gradient(135deg,rgba(31,140,255,.14),rgba(16,26,38,.8) 52%,rgba(5,7,10,.34))}.client-picker-hero:before{content:"";position:absolute;inset:-85px auto auto 56%;width:250px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(100,180,255,.24),transparent 68%);pointer-events:none}.client-picker-session{position:relative;z-index:1;display:flex;align-items:center;gap:11px;min-width:0}.client-picker-session .mini-mark{width:42px;height:42px;display:grid;place-items:center;flex:0 0 42px;border:1px solid rgba(100,180,255,.42);border-radius:13px;background:rgba(31,140,255,.16);color:var(--blue2);font-weight:950;font-size:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}.client-picker-session b{display:block;font-size:14px;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.client-picker-session small{display:block;margin-top:3px;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.client-picker-capacity{position:relative;z-index:1;display:flex;gap:14px;align-items:center}.client-picker-capacity div{min-width:66px;padding:8px 10px;border:1px solid rgba(255,255,255,.13);border-radius:13px;background:rgba(5,7,10,.36);text-align:center}.client-picker-capacity b{display:block;font-size:16px;line-height:1}.client-picker-capacity small{display:block;margin-top:4px;color:var(--muted);font-size:9px;font-weight:850;text-transform:uppercase;letter-spacing:.08em}.client-picker-controls{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:center;margin:14px 0 11px}.client-picker-controls .search{width:100%;min-height:42px}.client-filter-strip{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.filter-btn{border:1px solid var(--border);border-radius:999px;padding:8px 10px;background:rgba(255,255,255,.04);color:var(--muted);font-size:10px;font-weight:900;transition:.16s ease}.filter-btn:hover,.filter-btn.active{color:var(--cream);border-color:rgba(100,180,255,.58);background:linear-gradient(135deg,rgba(31,140,255,.24),rgba(100,180,255,.11));box-shadow:0 0 18px rgba(31,140,255,.14)}.client-picker-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;max-height:48vh;overflow:auto;padding:2px}.client-picker-card{position:relative;display:flex;flex-direction:column;min-height:190px;padding:13px;border:1px solid rgba(255,255,255,.13);border-radius:17px;background:linear-gradient(155deg,rgba(16,26,38,.97),rgba(7,12,18,.95));overflow:hidden;transition:.18s ease}.client-picker-card:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 92% 0%,rgba(31,140,255,.17),transparent 45%);pointer-events:none}.client-picker-card:hover{transform:translateY(-2px);border-color:rgba(100,180,255,.52);box-shadow:0 17px 30px rgba(0,0,0,.22),0 0 24px rgba(31,140,255,.09)}.client-picker-card.is-booked{border-color:rgba(115,217,159,.42);background:linear-gradient(155deg,rgba(20,45,38,.7),rgba(7,12,18,.95))}.client-picker-card.is-full{opacity:.67}.client-card-top{position:relative;z-index:1;display:flex;align-items:center;gap:10px;min-width:0}.client-avatar{width:39px;height:39px;display:grid;place-items:center;flex:0 0 39px;border:1px solid rgba(100,180,255,.44);border-radius:13px;background:linear-gradient(145deg,rgba(31,140,255,.26),rgba(100,180,255,.08));color:var(--cream);font-size:12px;font-weight:950;letter-spacing:.02em;box-shadow:inset 0 1px 0 rgba(255,255,255,.13)}.client-card-name{min-width:0;flex:1}.client-card-name h3{margin:0;font-size:14px;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.client-card-name p{margin:4px 0 0;font-size:10px;color:var(--blue2);font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.client-card-contact{position:relative;z-index:1;display:grid;gap:5px;margin-top:14px;color:var(--muted);font-size:10px;line-height:1.35;min-width:0}.client-card-contact span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.client-card-footer{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:13px}.client-card-footer small{font-size:9px;color:var(--muted);font-weight:850}.client-add-btn{border:1px solid rgba(100,180,255,.65);border-radius:12px;padding:9px 11px;background:linear-gradient(135deg,#238fff,#155eaf);color:#fff;font-size:10px;font-weight:950;letter-spacing:.015em;box-shadow:0 10px 21px rgba(31,140,255,.22),inset 0 1px 0 rgba(255,255,255,.18);transition:.16s ease}.client-add-btn:hover:not(:disabled){transform:translateY(-1px) scale(1.015);box-shadow:0 14px 25px rgba(31,140,255,.38);filter:saturate(1.15)}.client-add-btn.added{border-color:rgba(115,217,159,.58);background:linear-gradient(135deg,rgba(115,217,159,.32),rgba(64,156,110,.42));color:#e5fff0;box-shadow:none}.client-add-btn.full{border-color:rgba(255,209,102,.37);background:rgba(255,209,102,.1);color:var(--warning);box-shadow:none}.client-add-btn:disabled{cursor:not-allowed}.client-picker-empty{grid-column:1/-1;padding:34px;border:1px dashed rgba(255,255,255,.18);border-radius:16px;color:var(--muted);font-size:12px;text-align:center}.client-picker-empty b{display:block;color:var(--cream);font-size:14px;margin-bottom:5px}@media(max-width:1060px){.client-picker-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.client-picker-controls{grid-template-columns:1fr}.client-filter-strip{justify-content:flex-start}.client-picker-hero{grid-template-columns:1fr}.client-picker-capacity{justify-content:flex-start}}
     @media(max-width:1060px){.layout{grid-template-columns:1fr}.panel-pad{display:block}.class-type-grid{grid-template-columns:1fr;overflow:visible}.type-card{min-width:0}.modal-grid{grid-template-columns:1fr}.topbar{align-items:flex-start}.top-actions{justify-content:flex-start}}@media(max-width:660px){.app{padding:13px}.topbar{display:grid}.brand h1{font-size:26px}.login-actions{grid-template-columns:1fr}.form-three,.form-two{grid-template-columns:1fr}.kind-grid,.repeat-days{grid-template-columns:1fr 1fr}.modal{padding:15px;border-radius:20px}.modal-head h2{font-size:22px}.class-type-grid{grid-template-columns:1fr}.calendar-header .top-actions{width:100%}.calendar-header .btn{flex:1}.pill{font-size:10px}.client-picker-grid{grid-template-columns:1fr}.client-picker-capacity{gap:8px}.client-picker-capacity div{min-width:58px}.client-picker-hero{padding:12px}.client-picker-session small{white-space:normal}.modal.client-picker-modal{width:calc(100vw - 20px)}}
   
+
+    /* v29 Session hover HUD + multi-client selection */
+    .session-hover{position:fixed;left:0;top:0;z-index:1200;width:min(296px,calc(100vw - 28px));padding:13px 14px;border:1px solid rgba(100,180,255,.42);border-left:4px solid var(--hover-accent,#1F8CFF);border-radius:17px;background:linear-gradient(150deg,rgba(16,26,38,.98),rgba(6,10,16,.97));box-shadow:0 22px 50px rgba(0,0,0,.46),0 0 34px var(--hover-glow,rgba(31,140,255,.18));backdrop-filter:blur(18px);pointer-events:none;opacity:0;visibility:hidden;transform:translateY(7px) scale(.975);transform-origin:top left;transition:opacity .14s ease,transform .16s cubic-bezier(.22,.85,.28,1),visibility .14s step-end;overflow:hidden}
+    .session-hover:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 96% 0%,var(--hover-glow,rgba(31,140,255,.14)),transparent 47%);pointer-events:none}.session-hover.is-visible{opacity:1;visibility:visible;transform:translateY(0) scale(1);transition:opacity .14s ease,transform .16s cubic-bezier(.22,.85,.28,1),visibility 0s}.session-hover-top,.session-hover-body{position:relative;z-index:1}.session-hover-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.session-hover-eyebrow{font-size:9px;line-height:1;color:var(--blue2);font-weight:950;letter-spacing:.12em;text-transform:uppercase}.session-hover h3{margin:5px 0 0;font-size:15px;letter-spacing:-.025em;line-height:1.12}.session-hover-chip{flex:0 0 auto;max-width:108px;padding:5px 7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid rgba(255,255,255,.15);border-radius:999px;background:rgba(255,255,255,.055);color:var(--cream);font-size:9px;font-weight:900}.session-hover-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}.session-hover-meta span{padding:5px 7px;border:1px solid rgba(255,255,255,.11);border-radius:999px;background:rgba(255,255,255,.035);color:var(--muted);font-size:9px;font-weight:850}.session-hover-clients{margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.1)}.session-hover-clients b{display:block;margin-bottom:5px;font-size:9px;color:var(--muted);font-weight:900;letter-spacing:.09em;text-transform:uppercase}.session-hover-client-names{font-size:11px;font-weight:850;line-height:1.35;color:var(--cream)}.session-hover-note{margin:10px 0 0;color:var(--muted);font-size:10px;line-height:1.38}.session-hover-public{margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.1);font-size:10px;color:var(--muted);font-weight:800}
+    .client-picker-selection{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-2px 0 13px;padding:10px 11px;border:1px solid rgba(100,180,255,.25);border-radius:14px;background:linear-gradient(135deg,rgba(31,140,255,.1),rgba(255,255,255,.025))}.client-picker-selection-copy{display:flex;align-items:center;gap:8px;min-width:0}.client-picker-selection-count{display:grid;place-items:center;min-width:28px;height:28px;padding:0 7px;border:1px solid rgba(100,180,255,.48);border-radius:10px;background:rgba(31,140,255,.18);color:var(--blue2);font-size:12px;font-weight:950}.client-picker-selection-copy b{font-size:11px}.client-picker-selection-copy small{display:block;margin-top:2px;color:var(--muted);font-size:9px;font-weight:800}.client-picker-card.is-selected{border-color:rgba(100,180,255,.78);box-shadow:0 18px 31px rgba(0,0,0,.25),0 0 26px rgba(31,140,255,.18)}.client-picker-card.is-selected:after{content:"Selected";position:absolute;right:10px;top:10px;padding:4px 6px;border:1px solid rgba(100,180,255,.5);border-radius:999px;background:rgba(31,140,255,.18);color:var(--blue2);font-size:8px;font-weight:950;letter-spacing:.05em;text-transform:uppercase}.client-select-btn{border:1px solid rgba(100,180,255,.65);border-radius:12px;padding:9px 11px;background:linear-gradient(135deg,#238fff,#155eaf);color:#fff;font-size:10px;font-weight:950;letter-spacing:.015em;box-shadow:0 10px 21px rgba(31,140,255,.22),inset 0 1px 0 rgba(255,255,255,.18);transition:.16s ease}.client-select-btn:hover:not(:disabled){transform:translateY(-1px) scale(1.015);box-shadow:0 14px 25px rgba(31,140,255,.38);filter:saturate(1.15)}.client-select-btn.selected{border-color:rgba(100,180,255,.86);background:linear-gradient(135deg,rgba(100,180,255,.46),rgba(31,140,255,.62));color:#fff}.client-select-btn.added{border-color:rgba(115,217,159,.58);background:linear-gradient(135deg,rgba(115,217,159,.32),rgba(64,156,110,.42));color:#e5fff0;box-shadow:none}.client-select-btn.full{border-color:rgba(255,209,102,.37);background:rgba(255,209,102,.1);color:var(--warning);box-shadow:none}.client-select-btn:disabled{cursor:not-allowed}.client-picker-footer-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.client-picker-footer-actions .btn.primary:disabled{cursor:not-allowed;opacity:.48;transform:none;box-shadow:none}
+    @media(max-width:660px){.session-hover{display:none}.client-picker-selection{align-items:flex-start}.client-picker-footer-actions{width:100%;justify-content:stretch}.client-picker-footer-actions .btn{flex:1}}
+
     /* v28 Reporting & payroll export */
     .modal.report-modal{width:min(1160px,calc(100vw - 36px));}
     .report-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;margin:0 0 16px;padding:15px 16px;border:1px solid rgba(100,180,255,.34);border-radius:18px;background:linear-gradient(135deg,rgba(31,140,255,.16),rgba(13,18,26,.82) 55%,rgba(115,217,159,.08));box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
@@ -43,6 +50,7 @@
   <main id="root"></main>
   <div class="backdrop" id="backdrop"><section class="modal" id="modal"></section></div>
   <div class="toast" id="toast"></div>
+  <aside class="session-hover" id="sessionHover" aria-hidden="true"></aside>
 <script>
 (() => {
   const API='/.netlify/functions/scheduler-api';
@@ -50,7 +58,7 @@
   const TIMES=Array.from({length:16},(_,i)=>String(i+5).padStart(2,'0')+':00');
   const params=new URLSearchParams(location.search);
   const initialMode=params.has('gym')?'gym':params.has('live')?'live':'login';
-  const root=document.getElementById('root'), modal=document.getElementById('modal'), backdrop=document.getElementById('backdrop'), toastEl=document.getElementById('toast');
+  const root=document.getElementById('root'), modal=document.getElementById('modal'), backdrop=document.getElementById('backdrop'), toastEl=document.getElementById('toast'), sessionHover=document.getElementById('sessionHover');
   // Keep initial state declarations above helpers, but initialize date values only after the helper functions exist.
   // The previous build evaluated monday()/iso() before their const declarations, which stopped the entire app from rendering.
   let mode=initialMode, state=null, token=sessionStorage.getItem('tf_scheduler_admin_token')||'', activeCoachId='jordan', weekStart=null, gymDate='', poller=null, saving=false, drag=null;
@@ -96,9 +104,39 @@
   function syncPill(){const s=state?.updatedAt?`Saved ${new Date(state.updatedAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'Connecting…';return `<span class="pill ${saving?'warn':''}"><span class="dot"></span>${saving?'Saving securely…':esc(s)}</span>`}
   function clientNames(s){const names=clientsForSession(s.id).map(c=>c.name).filter(Boolean);if(!names.length)return '';const visible=names.slice(0,3);const rest=names.length-visible.length;return `${visible.join(' · ')}${rest?` +${rest}`:''}`}
   function tile(s,context='coach'){
-    const t=type(s.classTypeId), c=coach(s.coachId), count=bookedCount(s), publicTile=context!=='coach';
-    return `<article class="${context==='gym'?'gym-tile':'session-tile'}" ${context==='coach'?'draggable="true"':''} data-session="${esc(s.id)}" style="--type:${esc(t.color||'#1F8CFF')};--type-glow:${esc((t.color||'#1F8CFF')+'55')}">${context==='gym'?`<div><strong>${esc(t.name)}</strong><small>${esc(s.kind||'Group')} · ${count}/${s.capacity||10}</small></div>`:`<div class="title-row"><strong>${esc(t.name)}</strong><span class="format">${esc(s.kind||'Group')}</span></div>${context==='coach'&&clientNames(s)?`<div class="names">${esc(clientNames(s))}</div>`:''}<div class="meta"><span>${context==='coach'?esc(c?.name||'Coach'):`${count}/${s.capacity||10} spots`}</span><span>${context==='coach'?`${s.durationMinutes||60} min`:''}</span></div>`}</article>`;
+    const t=type(s.classTypeId), c=coach(s.coachId), count=bookedCount(s);
+    return `<article class="${context==='gym'?'gym-tile':'session-tile'}" ${context==='coach'?'draggable="true"':''} data-session="${esc(s.id)}" data-tile-context="${esc(context)}" style="--type:${esc(t.color||'#1F8CFF')};--type-glow:${esc((t.color||'#1F8CFF')+'55')}">${context==='gym'?`<div><strong>${esc(t.name)}</strong><small>${esc(s.kind||'Group')} · ${count}/${s.capacity||10}</small></div>`:`<div class="title-row"><strong>${esc(t.name)}</strong><span class="format">${esc(s.kind||'Group')}</span></div>${context==='coach'&&clientNames(s)?`<div class="names">${esc(clientNames(s))}</div>`:''}<div class="meta"><span>${context==='coach'?esc(c?.name||'Coach'):`${count}/${s.capacity||10} spots`}</span><span>${context==='coach'?`${s.durationMinutes||60} min`:''}</span></div>`}</article>`;
   }
+
+  function sessionHoverDetails(sessionId, context='coach'){
+    const s=(state?.sessions||[]).find(x=>x.id===sessionId);if(!s)return null;
+    const t=type(s.classTypeId), c=coach(s.coachId), booked=clientsForSession(s.id), count=booked.length, capacity=Math.max(1,+s.capacity||1);
+    const names=booked.map(x=>x.name).filter(Boolean), shown=names.slice(0,5), remaining=Math.max(0,names.length-shown.length);
+    const coachOnly=context==='coach';
+    return {s,t,c,count,capacity,namesText:`${shown.join(' · ')}${remaining?` +${remaining}`:''}`,coachOnly};
+  }
+  function placeSessionHover(event){
+    if(!sessionHover?.classList.contains('is-visible'))return;
+    const margin=14, box=sessionHover.getBoundingClientRect();
+    let left=event.clientX+16, top=event.clientY+16;
+    if(left+box.width>window.innerWidth-margin)left=Math.max(margin,event.clientX-box.width-16);
+    if(top+box.height>window.innerHeight-margin)top=Math.max(margin,event.clientY-box.height-16);
+    sessionHover.style.left=`${left}px`;sessionHover.style.top=`${top}px`;
+  }
+  function showSessionHover(event, sessionId, context='coach'){
+    if(drag||!sessionHover)return;
+    const d=sessionHoverDetails(sessionId,context);if(!d)return;
+    const {s,t,c,count,capacity,namesText,coachOnly}=d;
+    const meta=[`${prettyDate(s.date)} · ${prettyTime(s.time)}`,`${s.durationMinutes||60} min`,coachOnly?(c?.name||'Coach'):`${count}/${capacity} booked`];
+    const attendance=coachOnly?(state.bookings||[]).filter(b=>b.sessionId===s.id&&['approved','confirmed'].includes(b.status||'approved')).map(b=>b.attendance||'unmarked'):[];
+    const present=attendance.filter(x=>x==='present'||x==='late').length;
+    const clientSection=coachOnly?`<div class="session-hover-clients"><b>Booked clients · ${count}/${capacity}</b><div class="session-hover-client-names">${esc(namesText||'No clients booked yet')}</div>${attendance.length?`<div class="session-hover-note">${present} marked present/late · ${attendance.filter(x=>x==='absent').length} absent</div>`:''}</div>`:`<div class="session-hover-public">${count}/${capacity} spot${capacity===1?'':'s'} currently booked · Request approval required</div>`;
+    sessionHover.style.setProperty('--hover-accent',t.color||'#1F8CFF');
+    sessionHover.style.setProperty('--hover-glow',`${t.color||'#1F8CFF'}44`);
+    sessionHover.innerHTML=`<div class="session-hover-top"><div><div class="session-hover-eyebrow">Session preview</div><h3>${esc(t.name||'Session')}</h3></div><span class="session-hover-chip">${esc(s.kind||'Group')}</span></div><div class="session-hover-meta">${meta.map(item=>`<span>${esc(item)}</span>`).join('')}</div>${clientSection}${coachOnly&&s.notes?`<p class="session-hover-note">${esc(s.notes)}</p>`:''}`;
+    sessionHover.classList.add('is-visible');sessionHover.setAttribute('aria-hidden','false');placeSessionHover(event);
+  }
+  function hideSessionHover(){if(!sessionHover)return;sessionHover.classList.remove('is-visible');sessionHover.setAttribute('aria-hidden','true')}
   function header(){
     const pending=(state?.requests||[]).filter(r=>r.status==='requested').length;
     const title=mode==='gym'?'Gym View':mode==='live'?'Client Live Feed':'Scheduling Command Center';
@@ -196,7 +234,7 @@
     for(const tm of TIMES){html+=`<div class="gym-time">${prettyTime(tm)}</div>`;for(const c of active){const ss=sessionsAt(gymDate,tm,c.id);html+=`<div class="gym-slot ${isAvailable(c.id,gymDate,tm)?'available':''}">${ss.map(s=>tile(s,'gym')).join('')}</div>`}}
     return html+'</section></div>';
   }
-  function render(){if(mode==='login')return renderLogin();if(!state){root.innerHTML='<section class="login"><div class="login-card"><div class="mark">TF</div><h1>Connecting…</h1></div></section>';return}const content=mode==='coach'?`<section class="layout">${sidebar()}<main class="panel"><div class="calendar-wrap">${weekCalendar()}</div></main></section>`:mode==='live'?`<main class="panel"><div class="calendar-wrap">${liveCalendar()}</div></main>`:`<main class="panel"><div class="gym-stage">${gymCalendar()}</div></main>`;root.innerHTML=`<div class="app">${header()}${content}</div>`;bindPage()}
+  function render(){hideSessionHover();if(mode==='login')return renderLogin();if(!state){root.innerHTML='<section class="login"><div class="login-card"><div class="mark">TF</div><h1>Connecting…</h1></div></section>';return}const content=mode==='coach'?`<section class="layout">${sidebar()}<main class="panel"><div class="calendar-wrap">${weekCalendar()}</div></main></section>`:mode==='live'?`<main class="panel"><div class="calendar-wrap">${liveCalendar()}</div></main>`:`<main class="panel"><div class="gym-stage">${gymCalendar()}</div></main>`;root.innerHTML=`<div class="app">${header()}${content}</div>`;bindPage()}
   function bindPage(){
     document.getElementById('logoutBtn')?.addEventListener('click',()=>{token='';sessionStorage.removeItem('tf_scheduler_admin_token');stopPolling();mode='login';state=null;render()});
     document.getElementById('gymBtn')?.addEventListener('click',()=>window.open('?gym=1','_blank','noopener'));
@@ -213,14 +251,20 @@
     document.querySelectorAll('[data-gym-day]').forEach(b=>b.addEventListener('click',()=>{gymDate=iso(addDays(new Date(gymDate+'T12:00:00'),+b.dataset.gymDay));render()}));
     document.querySelector('[data-gym-today]')?.addEventListener('click',()=>{gymDate=iso(new Date());render()});
     document.querySelectorAll('[data-slot-date]').forEach(cell=>{cell.addEventListener('click',e=>{if(e.target.closest('.session-tile'))return;const date=cell.dataset.slotDate,time=cell.dataset.slotTime;if(isAvailable(activeCoachId,date,time))openSession({date,time,coachId:activeCoachId})});cell.addEventListener('dragover',e=>{if(isAvailable(activeCoachId,cell.dataset.slotDate,cell.dataset.slotTime)){e.preventDefault();cell.classList.add('drag-over')}});cell.addEventListener('dragleave',()=>cell.classList.remove('drag-over'));cell.addEventListener('drop',e=>{e.preventDefault();cell.classList.remove('drag-over');const payload=parseDrag(e);if(!payload)return;const date=cell.dataset.slotDate,time=cell.dataset.slotTime;if(payload.kind==='type')openSession({date,time,coachId:activeCoachId,classTypeId:payload.id});if(payload.kind==='session')moveSession(payload.id,date,time,activeCoachId)})});
+    document.querySelectorAll('[data-session]').forEach(el=>{
+      const context=el.dataset.tileContext||'coach';
+      el.addEventListener('mouseenter',e=>showSessionHover(e,el.dataset.session,context));
+      el.addEventListener('mousemove',placeSessionHover);
+      el.addEventListener('mouseleave',hideSessionHover);
+    });
     document.querySelectorAll('[data-type]').forEach(el=>{el.addEventListener('dragstart',e=>{drag={kind:'type',id:el.dataset.type};e.dataTransfer.setData('text/plain',JSON.stringify(drag));e.dataTransfer.effectAllowed='copy'});el.addEventListener('dragend',()=>drag=null)});
-    document.querySelectorAll('.session-tile[draggable="true"]').forEach(el=>{el.addEventListener('dragstart',e=>{drag={kind:'session',id:el.dataset.session};e.dataTransfer.setData('text/plain',JSON.stringify(drag));e.dataTransfer.effectAllowed='move'});el.addEventListener('dragend',()=>drag=null);el.addEventListener('click',e=>{e.stopPropagation();openSession({sessionId:el.dataset.session})})});
+    document.querySelectorAll('.session-tile[draggable="true"]').forEach(el=>{el.addEventListener('dragstart',e=>{hideSessionHover();drag={kind:'session',id:el.dataset.session};e.dataTransfer.setData('text/plain',JSON.stringify(drag));e.dataTransfer.effectAllowed='move'});el.addEventListener('dragend',()=>{drag=null;hideSessionHover()});el.addEventListener('click',e=>{e.stopPropagation();openSession({sessionId:el.dataset.session})})});
     document.querySelectorAll('.live [data-session]').forEach(el=>el.addEventListener('click',()=>openRequest({sessionId:el.dataset.session})));
     document.querySelectorAll('[data-public-date]').forEach(cell=>{cell.querySelector('.slot-request')?.addEventListener('click',e=>{e.stopPropagation();openRequest({date:cell.dataset.publicDate,time:cell.dataset.publicTime})})});
   }
   function parseDrag(e){try{return JSON.parse(e.dataTransfer.getData('text/plain'))}catch{return drag}}
   async function moveSession(id,date,time,coachId){const current=clone(state);const s=state.sessions.find(x=>x.id===id);if(!s)return;if(!isAvailable(coachId,date,time)){toast('That coach is not available at this time.');return}s.date=date;s.time=time;s.coachId=coachId;try{await commitState('Moved session.')}catch(e){state=current;render();toast(e.message,'error')}}
-  function openModal(html,variant=''){modal.className=`modal ${variant}`.trim();modal.innerHTML=html;backdrop.classList.add('open')}function closeModal(){backdrop.classList.remove('open');modal.className='modal';modal.innerHTML=''}backdrop.addEventListener('click',e=>{if(e.target===backdrop)closeModal()});window.closeModal=closeModal;
+  function openModal(html,variant=''){hideSessionHover();modal.className=`modal ${variant}`.trim();modal.innerHTML=html;backdrop.classList.add('open')}function closeModal(){backdrop.classList.remove('open');modal.className='modal';modal.innerHTML=''}backdrop.addEventListener('click',e=>{if(e.target===backdrop)closeModal()});window.closeModal=closeModal;
   function sessionDraft(existing,seed){return existing?clone(existing):{id:'',date:seed.date,time:seed.time,coachId:seed.coachId,classTypeId:seed.classTypeId||state.classTypes[0]?.id,kind:'Group',capacity:10,durationMinutes:60,status:'active',notes:'',repeatWeeks:0,repeatDays:[],createdAt:new Date().toISOString()}}
   function openSession(opts={}){
     const existing=opts.sessionId?state.sessions.find(s=>s.id===opts.sessionId):null;let d=opts.editorState?.draft?clone(opts.editorState.draft):sessionDraft(existing,opts);let kind=opts.editorState?.kind||d.kind||'Group';let repeatDays=new Set(opts.editorState?.repeatDays||d.repeatDays||[]), repeatWeeks=opts.editorState?.repeatWeeks??(+d.repeatWeeks||0);
@@ -269,13 +313,14 @@
   }
   function clientInitials(name='Client'){const parts=String(name).trim().split(/\s+/).filter(Boolean);return (parts.slice(0,2).map(x=>x[0]||'').join('')||'CL').toUpperCase()}
   function openClientPicker(sessionId,editorState={}){
-    let q='',packageFilter='All Clients';
+    let q='',packageFilter='All Clients',selected=new Set();
     const draw=()=>{
       const session=state.sessions.find(s=>s.id===sessionId);
       if(!session){toast('This session is no longer available.','error');closeModal();return}
       const sessionType=type(session.classTypeId);
       const booked=clientsForSession(sessionId);
       const bookedIds=new Set(booked.map(c=>c.id));
+      selected=new Set([...selected].filter(id=>!bookedIds.has(id)));
       const capacity=Math.max(1,+session.capacity||1);
       const openSpots=Math.max(0,capacity-booked.length);
       const allPackages=[...new Set((state.clients||[]).map(c=>(c.package||'Unassigned').trim()||'Unassigned'))].sort((a,b)=>a.localeCompare(b));
@@ -283,34 +328,36 @@
         const hay=[c.name,c.email,c.phone,c.package,c.chargeDate].join(' ').toLowerCase();
         return (!q||hay.includes(q.toLowerCase()))&&(packageFilter==='All Clients'||(c.package||'Unassigned')===packageFilter);
       }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-      openModal(`<div class="modal-head"><div><div class="eyebrow">Client Portal</div><h2>Add Clients</h2><p>Select a saved client for this session. Client records stay private to the coach workspace.</p></div><button class="btn ghost" id="pickerClose">Close</button></div><section class="client-picker-hero"><div class="client-picker-session"><div class="mini-mark">TF</div><div><b>${esc(sessionType.name||'Session')}</b><small>${esc(session.kind||'Group')} · ${prettyDate(session.date)} · ${prettyTime(session.time)} · ${esc(coach(session.coachId)?.name||'Coach')}</small></div></div><div class="client-picker-capacity"><div><b>${booked.length}/${capacity}</b><small>Booked</small></div><div><b>${openSpots}</b><small>Open</small></div></div></section><div class="client-picker-controls"><input class="search" id="pickerSearch" placeholder="Search name, package, email, or phone" value="${esc(q)}"><div class="client-filter-strip">${['All Clients',...allPackages].map(name=>`<button class="filter-btn ${packageFilter===name?'active':''}" data-package-filter="${esc(name)}">${esc(name)}</button>`).join('')}</div></div><section class="client-picker-grid">${filtered.length?filtered.map(c=>{const already=bookedIds.has(c.id);const full=openSpots===0&&!already;return `<article class="client-picker-card ${already?'is-booked':''} ${full?'is-full':''}"><div class="client-card-top"><div class="client-avatar">${esc(clientInitials(c.name))}</div><div class="client-card-name"><h3>${esc(c.name||'Client')}</h3><p>${esc(c.package||'Unassigned')}</p></div></div><div class="client-card-contact"><span>${esc(c.email||'No email on record')}</span><span>${esc(c.phone||'No phone on record')}</span></div><div class="client-card-footer"><small>${c.chargeDate?`Charge ${esc(c.chargeDate)}`:'No charge date'}</small><button class="client-add-btn ${already?'added':''} ${full?'full':''}" data-add-client="${esc(c.id)}" ${already||full?'disabled':''}>${already?'Added':full?'Session Full':'Add Client'}</button></div></article>`}).join(''):`<div class="client-picker-empty"><b>No clients found</b>Adjust the search or add a client in the Client Management portal first.</div>`}</section><div class="modal-actions"><button class="btn" id="pickerBack">Back to Session</button><button class="btn ghost" id="pickerManage">Client Management</button></div>`, 'client-picker-modal');
+      const selectedCount=selected.size;
+      openModal(`<div class="modal-head"><div><div class="eyebrow">Client Portal</div><h2>Select Clients</h2><p>Select multiple saved clients, then add them together to this session.</p></div><button class="btn ghost" id="pickerClose">Close</button></div><section class="client-picker-hero"><div class="client-picker-session"><div class="mini-mark">TF</div><div><b>${esc(sessionType.name||'Session')}</b><small>${esc(session.kind||'Group')} · ${prettyDate(session.date)} · ${prettyTime(session.time)} · ${esc(coach(session.coachId)?.name||'Coach')}</small></div></div><div class="client-picker-capacity"><div><b>${booked.length}/${capacity}</b><small>Booked</small></div><div><b>${openSpots}</b><small>Open</small></div></div></section><div class="client-picker-controls"><input class="search" id="pickerSearch" placeholder="Search name, package, email, or phone" value="${esc(q)}"><div class="client-filter-strip">${['All Clients',...allPackages].map(name=>`<button class="filter-btn ${packageFilter===name?'active':''}" data-package-filter="${esc(name)}">${esc(name)}</button>`).join('')}</div></div><div class="client-picker-selection"><div class="client-picker-selection-copy"><span class="client-picker-selection-count">${selectedCount}</span><div><b>${selectedCount?'Clients ready to add':'Select clients to add'}</b><small>${openSpots} open ${openSpots===1?'spot':'spots'} · selection is limited by remaining capacity</small></div></div>${selectedCount?'<button class="btn ghost compact" id="clearClientSelection">Clear</button>':''}</div><section class="client-picker-grid">${filtered.length?filtered.map(c=>{const already=bookedIds.has(c.id),isSelected=selected.has(c.id),full=!isSelected&&openSpots===0;return `<article class="client-picker-card ${already?'is-booked':''} ${isSelected?'is-selected':''} ${full?'is-full':''}"><div class="client-card-top"><div class="client-avatar">${esc(clientInitials(c.name))}</div><div class="client-card-name"><h3>${esc(c.name||'Client')}</h3><p>${esc(c.package||'Unassigned')}</p></div></div><div class="client-card-contact"><span>${esc(c.email||'No email on record')}</span><span>${esc(c.phone||'No phone on record')}</span></div><div class="client-card-footer"><small>${c.chargeDate?`Charge ${esc(c.chargeDate)}`:'No charge date'}</small><button class="client-select-btn ${already?'added':''} ${isSelected?'selected':''} ${full?'full':''}" data-select-client="${esc(c.id)}" ${already||full?'disabled':''}>${already?'Added':isSelected?'Selected':full?'Session Full':'Select'}</button></div></article>`}).join(''):`<div class="client-picker-empty"><b>No clients found</b>Adjust the search or add a client in the Client Management portal first.</div>`}</section><div class="modal-actions client-picker-footer-actions"><button class="btn" id="pickerBack">Back to Session</button><button class="btn ghost" id="pickerManage">Client Management</button><button class="btn primary" id="addSelectedClients" ${selectedCount?'':'disabled'}>Add Selected${selectedCount?` (${selectedCount})`:''}</button></div>`, 'client-picker-modal');
       document.getElementById('pickerClose').onclick=()=>openSession({sessionId,editorState});
       document.getElementById('pickerBack').onclick=()=>openSession({sessionId,editorState});
       document.getElementById('pickerManage').onclick=()=>openClients();
       document.getElementById('pickerSearch').oninput=e=>{q=e.target.value;draw()};
+      document.getElementById('clearClientSelection')?.addEventListener('click',()=>{selected.clear();draw()});
       modal.querySelectorAll('[data-package-filter]').forEach(btn=>btn.onclick=()=>{packageFilter=btn.dataset.packageFilter;draw()});
-      modal.querySelectorAll('[data-add-client]').forEach(btn=>btn.onclick=async()=>{
-        const clientId=btn.dataset.addClient;
-        const currentSession=state.sessions.find(s=>s.id===sessionId);
-        if(!currentSession)return;
-        const currentBooked=clientsForSession(sessionId);
-        if(currentBooked.some(c=>c.id===clientId)){toast('That client is already booked.');draw();return}
-        if(currentBooked.length>=Math.max(1,+currentSession.capacity||1)){toast('This session is at capacity.','error');draw();return}
-        let added=false;
-        await commit(mut=>{
-          const target=mut.sessions.find(s=>s.id===sessionId);
-          if(!target)return;
-          const count=(mut.bookings||[]).filter(b=>b.sessionId===sessionId&&['approved','confirmed'].includes(b.status||'approved')).length;
-          if(count>=Math.max(1,+target.capacity||1))return;
-          if(!mut.bookings.some(b=>b.sessionId===sessionId&&b.clientId===clientId)){
-            mut.bookings.push({id:uid(),sessionId,clientId,status:'approved',createdAt:new Date().toISOString()});
-            added=true;
-          }
-        },'Client added to session.');
-        if(!added){toast('This session changed before the client could be added.','error');draw();return}
-        toast('Client added to this session.');
-        openSession({sessionId,editorState});
+      modal.querySelectorAll('[data-select-client]').forEach(btn=>btn.onclick=()=>{
+        const clientId=btn.dataset.selectClient;
+        if(selected.has(clientId)){selected.delete(clientId);draw();return}
+        if(selected.size>=openSpots){toast(`Only ${openSpots} open ${openSpots===1?'spot is':'spots are'} available.`,'error');return}
+        selected.add(clientId);draw();
       });
+      document.getElementById('addSelectedClients').onclick=async()=>{
+        const selectedIds=[...selected];
+        if(!selectedIds.length)return;
+        let addedIds=[],blocked=false;
+        await commit(mut=>{
+          const target=mut.sessions.find(s=>s.id===sessionId);if(!target)return;
+          const existingIds=new Set((mut.bookings||[]).filter(b=>b.sessionId===sessionId&&['approved','confirmed'].includes(b.status||'approved')).map(b=>b.clientId));
+          const capacityNow=Math.max(1,+target.capacity||1);
+          const candidates=selectedIds.filter(id=>!existingIds.has(id));
+          if(existingIds.size+candidates.length>capacityNow){blocked=true;return}
+          for(const clientId of candidates){mut.bookings.push({id:uid(),sessionId,clientId,status:'approved',createdAt:new Date().toISOString()});addedIds.push(clientId)}
+        },'Selected clients added to session.');
+        if(blocked||!addedIds.length){toast('The session changed and no longer has enough open spots.','error');draw();return}
+        toast(`${addedIds.length} client${addedIds.length===1?'':'s'} added to this session.`);
+        openSession({sessionId,editorState});
+      };
     };
     draw();
   }
