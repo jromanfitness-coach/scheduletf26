@@ -1,4 +1,4 @@
-# Tifton Fitness Scheduling Portal — v29
+# Tifton Fitness Scheduling Portal — v30
 
 ## What changed
 - **Shared server state:** schedules, class types, coaches, availability, clients, bookings, and client requests are stored in Netlify Blobs through a server-side API — not in browser `localStorage`.
@@ -68,6 +68,11 @@ When editing an existing session, select **+ Add Client** in the Booked Clients 
 - Excel files are generated locally in the browser from the already server-synced schedule state. The exporter loads the ExcelJS browser bundle only when you click an Excel export button; no Netlify environment-variable or server setup changes are required.
 
 
-## v29 updates
+## v30 updates
 - Hover a coach session for a compact session inspector.
 - Select multiple clients in the Client Portal, then add them all at once.
+
+
+## v30 client selection workflow
+
+Inside a saved session, choose **+ Add Client**. Click any client card/name area to select it green for bulk add, then use **Save Now** to add all selected clients and return to the session editor. The card-level **Add Client** button instantly books that one client while keeping the Client Portal open.
