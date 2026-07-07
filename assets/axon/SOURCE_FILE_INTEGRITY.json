@@ -1,0 +1,65 @@
+[
+  {
+    "asset": "assets/axon/axon-performance-blue.svg",
+    "source_filename": "HDaxonBlue.svg",
+    "source_sha256": "90d620964dcbdfaafd22f66b84fda62eebdeccf594b4f96db9d9d644e286416e",
+    "copied_sha256": "90d620964dcbdfaafd22f66b84fda62eebdeccf594b4f96db9d9d644e286416e",
+    "identical": true
+  },
+  {
+    "asset": "assets/axon/axon-performance-white.svg",
+    "source_filename": "HDaxonWhite.svg",
+    "source_sha256": "7c6e72e5381d265d95d718e30673c20739f0ec05693dd42fbee2c44337b6f670",
+    "copied_sha256": "7c6e72e5381d265d95d718e30673c20739f0ec05693dd42fbee2c44337b6f670",
+    "identical": true
+  },
+  {
+    "asset": "assets/axon/axon-insignia-blue.svg",
+    "source_filename": "AXON insignia LOGO.svg",
+    "source_sha256": "491d333ce30a9b76b559bfeeeabd8b97cb475bdf2571fa0d392d2e3be0eb1a86",
+    "copied_sha256": "491d333ce30a9b76b559bfeeeabd8b97cb475bdf2571fa0d392d2e3be0eb1a86",
+    "identical": true
+  },
+  {
+    "asset": "assets/axon/axon-insignia-white.svg",
+    "source_filename": "AXON insignia LOGO White.svg",
+    "source_sha256": "0a5c238385b3a58d2cdf2f770a4889caf849109ecff30d55be20f28ca91900f2",
+    "copied_sha256": "0a5c238385b3a58d2cdf2f770a4889caf849109ecff30d55be20f28ca91900f2",
+    "identical": true
+  },
+  {
+    "asset": "assets/axon/axon-performance-blue.png",
+    "source_filename": "HDaxonBluepng.png",
+    "source_sha256": "5c67d1d57223a1a63bb8cb85b888fa3476ded20856bf165b07281d82c88fad09",
+    "copied_sha256": "5c67d1d57223a1a63bb8cb85b888fa3476ded20856bf165b07281d82c88fad09",
+    "identical": true
+  },
+  {
+    "asset": "assets/axon/axon-performance-white.png",
+    "source_filename": "HDaxonWhitepng.png",
+    "source_sha256": "fd4ed3ead06ce7ca7bc26dcaedefa0898afb7a9bd0867d1fb1a631bb5fc0df5e",
+    "copied_sha256": "fd4ed3ead06ce7ca7bc26dcaedefa0898afb7a9bd0867d1fb1a631bb5fc0df5e",
+    "identical": true
+  },
+  {
+    "asset": "assets/axon/axon-performance-black.svg",
+    "source_filename": "HDaxonBlack.svg",
+    "source_sha256": "37eb7c6c78a4d8a9e4e2be19d7d52fd08ef810aa0af109ce82efce3c8cb79a89",
+    "copied_sha256": "37eb7c6c78a4d8a9e4e2be19d7d52fd08ef810aa0af109ce82efce3c8cb79a89",
+    "identical": true
+  },
+  {
+    "asset": "assets/axon/axon-insignia-blue.png",
+    "source_filename": "axonBlueInsignia.png",
+    "source_sha256": "e219cb1c5d7b941e35c2ff4f7fcf6d3e481a990da930bf959f0161ef7fe1a5e8",
+    "copied_sha256": "e219cb1c5d7b941e35c2ff4f7fcf6d3e481a990da930bf959f0161ef7fe1a5e8",
+    "identical": true
+  },
+  {
+    "asset": "assets/axon/axon-insignia-white.png",
+    "source_filename": "AXON insignia LOGO Whitepng.png",
+    "source_sha256": "5373f019110707c46b3fe78f908d71681cdae062e78c2e440ada951cfecd099d",
+    "copied_sha256": "5373f019110707c46b3fe78f908d71681cdae062e78c2e440ada951cfecd099d",
+    "identical": true
+  }
+]

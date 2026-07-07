@@ -1,4 +1,4 @@
-# Tifton Fitness Scheduling Portal — v30
+# Axon Performance Scheduling Portal — v33
 
 ## What changed
 - **Shared server state:** schedules, class types, coaches, availability, clients, bookings, and client requests are stored in Netlify Blobs through a server-side API — not in browser `localStorage`.
@@ -78,7 +78,25 @@ When editing an existing session, select **+ Add Client** in the Booked Clients 
 Inside a saved session, choose **+ Add Client**. Click any client card/name area to select it green for bulk add, then use **Save Now** to add all selected clients and return to the session editor. The card-level **Add Client** button instantly books that one client while keeping the Client Portal open.
 
 
-## v31 UI updates
+## v32 UI updates
 
 - Client Management now uses a card-based Client Portal. Select any client card to open a private dashboard with overview, sessions, package, notes, and details.
 - Session attendance is now a click-cycle button: **Attendance → Attended → Rescheduled → Cancelled → Attendance**. The saved state continues to feed reporting exports.
+
+
+## v32 Staff Performance Reporting
+
+The Reports button now opens a Staff Performance Command Center. It includes coach dashboards for completed sessions, Group/Semi-Private/1-on-1 attendance, per-session coaching commission, and manager dashboards for attributed new-member sign-ups.
+
+- Set **Commission / completed session** and **New member bonus** under **Coaches & Managers**. New member bonus defaults to **$15**.
+- Set **Signed up by** and **Member signup date** when adding/editing a client so manager incentive reporting has the correct attribution.
+- **Save PDF** opens the browser print dialog; choose **Save as PDF** and enable background graphics for the richest visual output.
+- **Staff Performance Workbook** produces a multi-sheet Excel export: Staff Dashboard, Coaching Commission, Member Sign-ups, Training Session Register, Attendance Detail, Client Attendance, and Class Type Summary.
+
+
+## v33 Axon Performance Brand System
+
+- Replaced all visible prior-brand labels with **Axon Performance**.
+- Added the supplied Axon Performance source artwork under `assets/axon/` and display it directly in the coach header, client/Gym views, sign-in screens, client picker, and printable staff dashboards.
+- The included SVG and PNG artwork is copied from the supplied source files without modification.
+- The existing Netlify Blob store name is deliberately unchanged so current live schedules, clients, bookings, requests, and backups remain intact after the visual rebrand.

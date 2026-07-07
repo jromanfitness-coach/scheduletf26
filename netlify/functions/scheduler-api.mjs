@@ -45,11 +45,11 @@ function defaultAvailability() {
 function defaultState() {
   const createdAt = now();
   return {
-    schema: 'tf-scheduler-state-v22',
+    schema: 'tf-scheduler-state-v32',
     revision: 1,
     createdAt,
     updatedAt: createdAt,
-    coaches: [{ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0 }],
+    coaches: [{ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15 }],
     availability: { jordan: defaultAvailability() },
     classTypes: [
       { id: 'forge1', name: 'Forge 1', intensity: 'Strength', desc: 'Strength-focused coaching.', duration: 60, color: '#1F8CFF', visible: true, active: true },
@@ -87,9 +87,11 @@ function normalizeState(raw, previous = defaultState()) {
     name: safeString(c.name, 100) || `Coach ${index + 1}`,
     role: ['Admin / Coach','Coach','Manager'].includes(c.role) ? c.role : 'Coach',
     active: c.active !== false,
-    payRate: clamp(c.payRate, 0, 10000, 0)
+    payRate: clamp(c.payRate, 0, 10000, 0),
+    sessionCommissionRate: clamp(c.sessionCommissionRate, 0, 10000, 0),
+    signupBonusRate: clamp(c.signupBonusRate, 0, 10000, 15)
   })) : previous.coaches;
-  if (!coaches.some(c => c.id === 'jordan')) coaches.unshift({ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0 });
+  if (!coaches.some(c => c.id === 'jordan')) coaches.unshift({ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15 });
 
   const coachIds = new Set(coaches.map(c => c.id));
   const availability = normalizeAvailability(source.availability);
@@ -131,6 +133,9 @@ function normalizeState(raw, previous = defaultState()) {
     phone: safeString(c.phone, 50),
     package: safeString(c.package, 140) || 'Unassigned',
     chargeDate: safeDate(c.chargeDate),
+    signupOwnerId: coachIds.has(safeString(c.signupOwnerId, 80)) ? safeString(c.signupOwnerId, 80) : '',
+    signupDate: safeDate(c.signupDate),
+    notes: safeString(c.notes, 3000),
     createdAt: safeString(c.createdAt, 40) || now(),
     updatedAt: safeString(c.updatedAt, 40) || now()
   }));
@@ -141,7 +146,7 @@ function normalizeState(raw, previous = defaultState()) {
     sessionId: safeString(b.sessionId, 100),
     clientId: safeString(b.clientId, 100),
     status: ['approved','confirmed','cancelled'].includes(b.status) ? b.status : 'approved',
-    attendance: ['unmarked','present','late','absent','excused'].includes(b.attendance) ? b.attendance : 'unmarked',
+    attendance: ['unmarked','present','rescheduled','cancelled','late','absent','excused'].includes(b.attendance) ? b.attendance : 'unmarked',
     attendanceMarkedAt: safeString(b.attendanceMarkedAt, 40),
     createdAt: safeString(b.createdAt, 40) || now()
   })).filter(b => sessionIds.has(b.sessionId) && clientIds.has(b.clientId));
@@ -165,7 +170,7 @@ function normalizeState(raw, previous = defaultState()) {
   })).filter(r => r.date && r.client.name && r.client.email);
 
   return {
-    schema: 'tf-scheduler-state-v22',
+    schema: 'tf-scheduler-state-v32',
     revision: clamp(source.revision, 1, Number.MAX_SAFE_INTEGER, previous.revision || 1),
     createdAt: safeString(source.createdAt, 40) || previous.createdAt || now(),
     updatedAt: safeString(source.updatedAt, 40) || now(),
