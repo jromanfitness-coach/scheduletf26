@@ -148,7 +148,7 @@ function normalizeState(raw, previous = defaultState()) {
   const sessions = (Array.isArray(source.sessions) ? source.sessions : []).slice(0, 10000).map((s, index) => ({
     id: safeString(s.id, 100) || `session_${index + 1}`,
     classTypeId: typeIds.has(s.classTypeId) ? s.classTypeId : classTypes[0]?.id || 'forge1',
-    kind: ['Group','Semi-Private','1-on-1'].includes(s.kind) ? s.kind : 'Group',
+    kind: ['Group','Semi-Private','1-on-1','Management'].includes(s.kind) ? s.kind : 'Group',
     date: safeDate(s.date),
     time: safeTime(s.time),
     coachId: coachIds.has(s.coachId) ? s.coachId : 'jordan',
@@ -156,6 +156,9 @@ function normalizeState(raw, previous = defaultState()) {
     durationMinutes: clamp(s.durationMinutes, 30, 240, 60),
     status: ['active','pending','canceled'].includes(s.status) ? s.status : 'active',
     notes: safeString(s.notes, 1200),
+    managementNewMember: Boolean(s.managementNewMember),
+    managementNewClient: Boolean(s.managementNewClient),
+    managementOwnerId: coachIds.has(safeString(s.managementOwnerId, 80)) ? safeString(s.managementOwnerId, 80) : '',
     repeatWeeks: clamp(s.repeatWeeks, 0, 52, 0),
     repeatDays: Array.isArray(s.repeatDays) ? s.repeatDays.filter(day => DAYS.includes(day)).slice(0, 5) : [],
     createdAt: safeString(s.createdAt, 40) || now(),
@@ -194,7 +197,7 @@ function normalizeState(raw, previous = defaultState()) {
     date: safeDate(r.date),
     time: safeTime(r.time),
     coachId: coachIds.has(r.coachId) ? r.coachId : 'jordan',
-    kind: ['Group','Semi-Private','1-on-1'].includes(r.kind) ? r.kind : 'Group',
+    kind: ['Group','Semi-Private','1-on-1','Management'].includes(r.kind) ? r.kind : 'Group',
     notes: safeString(r.notes, 1000),
     client: {
       name: safeString(r.client?.name || r.name, 120),
@@ -240,6 +243,8 @@ function publicState(state) {
       capacity: s.capacity,
       durationMinutes: s.durationMinutes,
       status: s.status,
+      managementNewMember: Boolean(s.managementNewMember),
+      managementNewClient: Boolean(s.managementNewClient),
       bookedCount: counts.get(s.id) || 0
     }))
   };
