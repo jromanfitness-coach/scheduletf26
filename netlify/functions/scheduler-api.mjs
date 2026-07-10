@@ -32,6 +32,34 @@ const safeDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? Stri
 const safeTime = value => /^\d{2}:\d{2}$/.test(String(value || '')) && TIMES.includes(String(value)) ? String(value) : '06:00';
 const safeDay = value => DAYS.includes(String(value)) ? String(value) : 'Mon';
 const sha = value => crypto.createHash('sha256').update(String(value)).digest('hex');
+function roleDefaults(role = 'Coach') {
+  const admin = role === 'Admin / Coach';
+  return {
+    isAdmin: admin,
+    managePermissions: admin,
+    manageSchedule: admin || role === 'Coach',
+    manageAvailability: admin || role === 'Coach' || role === 'Manager',
+    manageClients: admin || role === 'Manager',
+    viewOwnReports: true,
+    viewAllReports: admin,
+    exportReports: admin,
+    manageCompensation: admin,
+    approveRequests: admin || role === 'Manager'
+  };
+}
+function safePermissions(input = {}, role = 'Coach') {
+  const base = roleDefaults(role);
+  const next = { ...base };
+  for (const key of Object.keys(next)) next[key] = Boolean(input?.[key] ?? next[key]);
+  if (role === 'Admin / Coach') {
+    next.isAdmin = true;
+    next.managePermissions = true;
+    next.viewAllReports = true;
+    next.exportReports = true;
+    next.manageCompensation = true;
+  }
+  return next;
+}
 
 function defaultAvailability() {
   const output = {};
@@ -49,7 +77,7 @@ function defaultState() {
     revision: 1,
     createdAt,
     updatedAt: createdAt,
-    coaches: [{ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15 }],
+    coaches: [{ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15, accessPinHash: '', permissions: safePermissions({}, 'Admin / Coach') }],
     availability: { jordan: defaultAvailability() },
     classTypes: [
       { id: 'forge1', name: 'Forge 1', intensity: 'Strength', desc: 'Strength-focused coaching.', duration: 60, color: '#1F8CFF', visible: true, active: true },
@@ -82,16 +110,24 @@ function normalizeAvailability(input) {
 
 function normalizeState(raw, previous = defaultState()) {
   const source = raw && typeof raw === 'object' ? raw : previous;
-  const coaches = Array.isArray(source.coaches) ? source.coaches.slice(0, 100).map((c, index) => ({
-    id: safeString(c.id, 80) || `coach_${index + 1}`,
-    name: safeString(c.name, 100) || `Coach ${index + 1}`,
-    role: ['Admin / Coach','Coach','Manager'].includes(c.role) ? c.role : 'Coach',
-    active: c.active !== false,
-    payRate: clamp(c.payRate, 0, 10000, 0),
-    sessionCommissionRate: clamp(c.sessionCommissionRate, 0, 10000, 0),
-    signupBonusRate: clamp(c.signupBonusRate, 0, 10000, 15)
-  })) : previous.coaches;
-  if (!coaches.some(c => c.id === 'jordan')) coaches.unshift({ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15 });
+  const coaches = Array.isArray(source.coaches) ? source.coaches.slice(0, 100).map((c, index) => {
+    const role = ['Admin / Coach','Coach','Manager'].includes(c.role) ? c.role : 'Coach';
+    const coachId = safeString(c.id, 80) || `coach_${index + 1}`;
+    const plainPin = safeString(c.accessPinPlain, 80);
+    const existingHash = safeString(c.accessPinHash, 128);
+    return {
+      id: coachId,
+      name: safeString(c.name, 100) || `Coach ${index + 1}`,
+      role,
+      active: c.active !== false,
+      payRate: clamp(c.payRate, 0, 10000, 0),
+      sessionCommissionRate: clamp(c.sessionCommissionRate, 0, 10000, 0),
+      signupBonusRate: clamp(c.signupBonusRate, 0, 10000, 15),
+      accessPinHash: plainPin ? pinHashFor(coachId, plainPin) : existingHash,
+      permissions: safePermissions(c.permissions, role)
+    };
+  }) : previous.coaches;
+  if (!coaches.some(c => c.id === 'jordan')) coaches.unshift({ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15, accessPinHash: '', permissions: safePermissions({}, 'Admin / Coach') });
 
   const coachIds = new Set(coaches.map(c => c.id));
   const availability = normalizeAvailability(source.availability);
@@ -215,6 +251,14 @@ function base64url(input) {
 function tokenSecret() {
   return process.env.SCHEDULER_AUTH_SECRET || process.env.COACH_PIN || '1307!';
 }
+function pinHashFor(coachId, pin) {
+  return sha(`${safeString(coachId, 80)}:${String(pin || '')}:${tokenSecret()}`);
+}
+function safeCompare(leftValue, rightValue) {
+  const left = Buffer.from(String(leftValue || ''));
+  const right = Buffer.from(String(rightValue || ''));
+  return left.length === right.length && left.length > 0 && crypto.timingSafeEqual(left, right);
+}
 function signToken(payload) {
   const encoded = base64url(JSON.stringify(payload));
   const signature = crypto.createHmac('sha256', tokenSecret()).update(encoded).digest('base64url');
@@ -239,7 +283,7 @@ function suppliedToken(event) {
 }
 function requireAdmin(event) {
   const payload = verifyToken(suppliedToken(event));
-  return payload?.role === 'coach' ? payload : null;
+  return ['coach','staff'].includes(payload?.role) ? payload : null;
 }
 function constantTimePinMatch(value) {
   const expected = Buffer.from(process.env.COACH_PIN || '1307!');
@@ -344,17 +388,39 @@ export default async function handler(request) {
     if (body.action === 'login') {
       const limiter = await checkRateLimit(store, event, 'login');
       if (limiter.blocked) return json(429, { ok: false, error: 'Too many attempts. Try again in a few minutes.' });
-      if (!constantTimePinMatch(body.pin)) {
+      const state = await getState(store);
+      const issued = Math.floor(Date.now() / 1000);
+      let matchedCoach = null;
+      let permissions = null;
+      let tokenRole = 'staff';
+
+      if (constantTimePinMatch(body.pin)) {
+        matchedCoach = state.coaches.find(c => c.id === 'jordan') || state.coaches.find(c => c.role === 'Admin / Coach') || state.coaches[0];
+        permissions = safePermissions({}, 'Admin / Coach');
+        tokenRole = 'coach';
+      } else {
+        const submitted = String(body.pin || '');
+        for (const staff of state.coaches) {
+          if (staff.active === false || !staff.accessPinHash) continue;
+          if (safeCompare(pinHashFor(staff.id, submitted), staff.accessPinHash)) {
+            matchedCoach = staff;
+            permissions = safePermissions(staff.permissions, staff.role);
+            break;
+          }
+        }
+      }
+
+      if (!matchedCoach) {
         const attempts = (limiter.rate.attempts || 0) + 1;
         const blockedUntil = attempts >= 6 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : '';
         await store.setJSON(limiter.key, { attempts, windowStartedAt: limiter.rate.windowStartedAt, blockedUntil });
-        return json(401, { ok: false, error: attempts >= 6 ? 'Too many attempts. Try again in 15 minutes.' : 'Incorrect Coach/Admin PIN.' });
+        return json(401, { ok: false, error: attempts >= 6 ? 'Too many attempts. Try again in 15 minutes.' : 'Incorrect staff access PIN.' });
       }
+
       await store.setJSON(limiter.key, { attempts: 0, windowStartedAt: now(), blockedUntil: '' });
-      const state = await getState(store);
-      const issued = Math.floor(Date.now() / 1000);
-      const token = signToken({ sub: 'coach-admin', role: 'coach', iat: issued, exp: issued + (12 * 60 * 60) });
-      return json(200, { ok: true, token, state });
+      const user = { staffId: matchedCoach.id, name: matchedCoach.name, role: matchedCoach.role, permissions };
+      const token = signToken({ sub: matchedCoach.id, role: tokenRole, staffId: matchedCoach.id, permissions, iat: issued, exp: issued + (12 * 60 * 60) });
+      return json(200, { ok: true, token, user, state });
     }
 
     if (body.action === 'request') {
@@ -406,7 +472,15 @@ export default async function handler(request) {
       const previous = await getState(store);
       const baseRevision = Number(body.baseRevision || 0);
       if (baseRevision !== previous.revision) return json(409, { ok: false, error: 'A newer server version exists.', state: previous });
-      const next = normalizeState(body.state, previous);
+      let next = normalizeState(body.state, previous);
+      const perms = admin.permissions || {};
+      const adminUser = Boolean(perms.isAdmin || perms.managePermissions);
+      if (!adminUser) {
+        if (!perms.managePermissions && !perms.manageCompensation) next.coaches = previous.coaches;
+        if (!perms.manageClients) next.clients = previous.clients;
+        if (!perms.manageSchedule) { next.sessions = previous.sessions; next.bookings = previous.bookings; next.requests = previous.requests; }
+        if (!perms.manageAvailability) next.availability = previous.availability;
+      }
       const saved = await writeState(store, next, body.reason || 'coach update', previous);
       return json(200, { ok: true, state: saved });
     }
