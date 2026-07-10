@@ -158,6 +158,7 @@ function normalizeState(raw, previous = defaultState()) {
     notes: safeString(s.notes, 1200),
     managementNewMember: Boolean(s.managementNewMember),
     managementNewClient: Boolean(s.managementNewClient),
+    managementOwnerId: coachIds.has(safeString(s.managementOwnerId, 80)) ? safeString(s.managementOwnerId, 80) : '',
     repeatWeeks: clamp(s.repeatWeeks, 0, 52, 0),
     repeatDays: Array.isArray(s.repeatDays) ? s.repeatDays.filter(day => DAYS.includes(day)).slice(0, 5) : [],
     createdAt: safeString(s.createdAt, 40) || now(),
