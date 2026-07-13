@@ -31,6 +31,16 @@ const safeColor = value => /^#[0-9a-fA-F]{6}$/.test(String(value || '')) ? value
 const safeDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value) : '';
 const safeTime = value => /^\d{2}:\d{2}$/.test(String(value || '')) && TIMES.includes(String(value)) ? String(value) : '06:00';
 const safeDay = value => DAYS.includes(String(value)) ? String(value) : 'Mon';
+const isoDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const addDays = (date, n) => { const d = new Date(date); d.setDate(d.getDate() + n); return d; };
+function dateRangeList(start, end) {
+  const out = [];
+  let d = new Date(`${safeDate(start) || isoDate(new Date())}T12:00:00`);
+  let stop = new Date(`${safeDate(end) || safeDate(start) || isoDate(new Date())}T12:00:00`);
+  if (d > stop) { const t = d; d = stop; stop = t; }
+  for (; d <= stop; d = addDays(d, 1)) out.push(isoDate(d));
+  return out.slice(0, 62);
+}
 const sha = value => crypto.createHash('sha256').update(String(value)).digest('hex');
 function roleDefaults(role = 'Coach') {
   const admin = role === 'Admin / Coach';
@@ -77,7 +87,7 @@ function defaultState() {
     revision: 1,
     createdAt,
     updatedAt: createdAt,
-    coaches: [{ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15, accessPinHash: '', permissions: safePermissions({}, 'Admin / Coach') }],
+    coaches: [{ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15, payrollHours: {}, accessPinHash: '', permissions: safePermissions({}, 'Admin / Coach') }],
     availability: { jordan: defaultAvailability() },
     classTypes: [
       { id: 'forge1', name: 'Forge 1', intensity: 'Strength', desc: 'Strength-focused coaching.', duration: 60, color: '#1F8CFF', visible: true, active: true },
@@ -108,6 +118,19 @@ function normalizeAvailability(input) {
   return normalized;
 }
 
+
+function normalizePayrollHours(input) {
+  const out = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const [key, value] of Object.entries(input).slice(0, 5000)) {
+    const d = safeDate(key);
+    if (!d) continue;
+    const hrs = clamp(value, 0, 24, 0);
+    if (hrs > 0) out[d] = Math.round(hrs * 100) / 100;
+  }
+  return out;
+}
+
 function normalizeState(raw, previous = defaultState()) {
   const source = raw && typeof raw === 'object' ? raw : previous;
   const coaches = Array.isArray(source.coaches) ? source.coaches.slice(0, 100).map((c, index) => {
@@ -123,11 +146,12 @@ function normalizeState(raw, previous = defaultState()) {
       payRate: clamp(c.payRate, 0, 10000, 0),
       sessionCommissionRate: clamp(c.sessionCommissionRate, 0, 10000, 0),
       signupBonusRate: clamp(c.signupBonusRate, 0, 10000, 15),
+      payrollHours: normalizePayrollHours(c.payrollHours),
       accessPinHash: plainPin ? pinHashFor(coachId, plainPin) : existingHash,
       permissions: safePermissions(c.permissions, role)
     };
   }) : previous.coaches;
-  if (!coaches.some(c => c.id === 'jordan')) coaches.unshift({ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15, accessPinHash: '', permissions: safePermissions({}, 'Admin / Coach') });
+  if (!coaches.some(c => c.id === 'jordan')) coaches.unshift({ id: 'jordan', name: 'Jordan', role: 'Admin / Coach', active: true, payRate: 0, sessionCommissionRate: 0, signupBonusRate: 15, payrollHours: {}, accessPinHash: '', permissions: safePermissions({}, 'Admin / Coach') });
 
   const coachIds = new Set(coaches.map(c => c.id));
   const availability = normalizeAvailability(source.availability);
@@ -472,6 +496,33 @@ export default async function handler(request) {
 
     const admin = requireAdmin(event);
     if (!admin) return json(401, { ok: false, error: 'Coach authorization required.' });
+
+    if (body.action === 'savePayrollHours') {
+      const previous = await getState(store);
+      const staffId = safeString(body.staffId, 80);
+      const start = safeDate(body.start);
+      const end = safeDate(body.end);
+      if (!staffId || !start || !end) return json(400, { ok: false, error: 'Staff member and pay period are required.' });
+      const perms = admin.permissions || {};
+      const mayEdit = Boolean(perms.isAdmin || perms.managePermissions || perms.manageCompensation || admin.staffId === staffId);
+      if (!mayEdit) return json(403, { ok: false, error: 'Payroll editing permission required.' });
+
+      const next = normalizeState(previous, previous);
+      const staff = next.coaches.find(c => c.id === staffId);
+      if (!staff) return json(404, { ok: false, error: 'Staff member not found.' });
+
+      const dates = dateRangeList(start, end);
+      const submitted = body.hours && typeof body.hours === 'object' ? body.hours : {};
+      const merged = staff.payrollHours && typeof staff.payrollHours === 'object' ? { ...staff.payrollHours } : {};
+      for (const d of dates) delete merged[d];
+      for (const d of dates) {
+        const hrs = clamp(submitted[d], 0, 24, 0);
+        if (hrs > 0) merged[d] = Math.round(hrs * 100) / 100;
+      }
+      staff.payrollHours = normalizePayrollHours(merged);
+      const saved = await writeState(store, next, `payroll hours ${start} to ${end}`, previous);
+      return json(200, { ok: true, state: saved });
+    }
 
     if (body.action === 'save') {
       const previous = await getState(store);

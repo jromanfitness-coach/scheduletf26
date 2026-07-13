@@ -847,25 +847,23 @@
     modal.querySelectorAll('[data-payroll-date]').forEach(btn=>btn.onclick=()=>{selected=btn.dataset.payrollDate;if(input)input.value=numericHours(draft[selected]||0).toFixed(2);refresh(false);input?.focus?.();input?.select?.()});
     periodSelect.onchange=e=>{[periodStart,periodEnd]=String(e.target.value||'').split('|');dates=dateRangeList(periodStart,periodEnd);selected=dates[0]||periodStart;openStaffDashboard(staffId,{...filters,start:periodStart,end:periodEnd})};
     document.getElementById('savePayrollHours').onclick=async()=>{
-      if(!userCan('manageCompensation')&&!isAdmin()){toast('Payroll editing permission required.','error');return}
+      if(!userCan('manageCompensation')&&!isAdmin()&&currentUser?.staffId!==staffId){toast('Payroll editing permission required.','error');return}
       const saveBtn=document.getElementById('savePayrollHours');
       try{
         if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving…'}
-        const next=clone(state);
-        const c=next.coaches.find(x=>x.id===staffId);
-        if(!c)throw new Error('Staff member not found.');
-        const merged=c.payrollHours&&typeof c.payrollHours==='object'?{...c.payrollHours}:{};
-        for(const d of dates)delete merged[d];
-        for(const d of dates){const hrs=numericHours(draft[d]||0);if(hrs>0)merged[d]=hrs}
-        c.payrollHours=merged;
-        const response=await api('',{method:'POST',body:JSON.stringify({action:'save',state:next,baseRevision:state.revision,reason:`payroll hours ${periodStart} to ${periodEnd}`})});
-        state=response.state;state.updatedAt=response.state.updatedAt;
+        const periodHours={};
+        for(const d of dates){
+          const hrs=numericHours(draft[d]||0);
+          periodHours[d]=hrs;
+        }
+        const response=await api('',{method:'POST',body:JSON.stringify({action:'savePayrollHours',staffId,start:periodStart,end:periodEnd,hours:periodHours})});
+        state=response.state;
         staff=coach(staffId)||{};
         original=clone(payrollMapFor(staff));
         draft={...original};
         toast(`Payroll hours saved for ${payrollPeriodLabel(periodStart,periodEnd)}.`);
-        refresh(false);
         if(periodSelect){const current=`${periodStart}|${periodEnd}`;periodSelect.innerHTML=payrollPeriodOptions(periodStart,staff).map(o=>`<option value="${esc(o.start)}|${esc(o.end)}" ${`${o.start}|${o.end}`===current?'selected':''}>${esc(o.label)}</option>`).join('')}
+        refresh(false);
       }catch(e){
         if(e.status===409&&e.data?.state){state=e.data.state;staff=coach(staffId)||{};original=clone(payrollMapFor(staff));draft={...original};refresh(false);toast('A newer server version was found. Payroll monitor reloaded; save again if needed.','error')}
         else toast(e.message||'Payroll hours could not be saved.','error')
