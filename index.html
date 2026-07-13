@@ -636,6 +636,9 @@
   function payrollMapFor(staff){return staff&&staff.payrollHours&&typeof staff.payrollHours==='object'?staff.payrollHours:{}}
   function payrollHoursForDate(staff,date){return numericHours(payrollMapFor(staff)[date]||0)}
   function payrollTrackedHours(staff,filters){return round2(dateRangeList(filters.start,filters.end).reduce((sum,d)=>sum+payrollHoursForDate(staff,d),0))}
+  function payrollDayLabel(date){return new Date(date+'T12:00:00').toLocaleDateString(undefined,{weekday:'short'})}
+  function payrollDateLabel(date){return new Date(date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}
+  function payrollDraftTotal(dates,draft){return round2(dates.reduce((sum,d)=>sum+numericHours(draft?.[d]||0),0))}
   function fileStamp(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
   function reportScope(filters){
     const start=filters.start||iso(monday(new Date()));
@@ -779,19 +782,50 @@
     draw();
   }
   function payrollHoursPanel(r,data){
-    const dates=dateRangeList(data.filters.start,data.filters.end);const first=dates[0]||data.filters.start;const map=payrollMapFor(r.coach);const selected=first;const rate=Number(r.coach.payRate)||0;
-    const dayButtons=dates.map(d=>`<button class="payroll-day-tile ${d===selected?'active':''}" data-payroll-date="${esc(d)}"><b>${dayName(d)}</b><span>${new Date(d+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})} · ${payrollHoursForDate(r.coach,d)}h</span></button>`).join('');
-    return `<section class="card payroll-hours-card"><div class="section-title"><h2>Payroll Hours Estimate</h2><span>${r.trackedHours.toFixed(2)} hrs tracked</span></div><p class="hint">Use this for non-session staff hours or payroll estimates. Pick a day in the selected report period, adjust hours, then save.</p><div class="payroll-period-picker"><div class="field"><label>Selected day</label><input id="payrollDaySelect" type="date" min="${esc(data.filters.start)}" max="${esc(data.filters.end)}" value="${esc(selected)}"></div><div class="field"><label>Hours for selected day</label><div class="payroll-hour-control"><button id="payrollMinus" type="button">−</button><div class="payroll-hour-display"><b id="payrollHoursLabel">${payrollHoursForDate(r.coach,selected).toFixed(2)} hrs</b><small>15-minute increments</small></div><button id="payrollPlus" type="button">+</button></div></div></div><div class="payroll-day-strip">${dayButtons}</div><div class="payroll-estimate-grid"><div class="payroll-estimate-box"><b id="payrollPeriodHours">${r.trackedHours.toFixed(2)}</b><span>Tracked hours</span></div><div class="payroll-estimate-box"><b>${money(rate)}</b><span>Hourly rate</span></div><div class="payroll-estimate-box"><b id="payrollEstimateValue">${money(r.hourlyPayroll)}</b><span>Payroll estimate</span></div></div><div class="payroll-save-row"><span class="hint">Saved hours feed the employee dashboard and payroll exports.</span><button class="btn primary" id="savePayrollHours">Save Hours</button></div></section>`
+    const dates=dateRangeList(data.filters.start,data.filters.end);
+    const first=dates[0]||data.filters.start;
+    const selected=first;
+    const rate=Number(r.coach.payRate)||0;
+    const currentMap=payrollMapFor(r.coach);
+    const dayButtons=dates.map(d=>`<button class="payroll-day-tile ${d===selected?'active':''}" data-payroll-date="${esc(d)}"><b>${esc(payrollDayLabel(d))}</b><span>${esc(payrollDateLabel(d))} · ${numericHours(currentMap[d]||0).toFixed(2)}h</span></button>`).join('');
+    return `<section class="card payroll-hours-card"><div class="section-title"><h2>Payroll Hours Estimate</h2><span id="payrollServerStatus">Server-synced · ${r.trackedHours.toFixed(2)} hrs</span></div><p class="hint">Simple payroll estimate for non-session staff hours. Select a day, use + / − in 15-minute increments, then save to the shared server record.</p><div class="payroll-period-picker"><div class="field"><label>Selected day</label><input id="payrollDaySelect" type="date" min="${esc(data.filters.start)}" max="${esc(data.filters.end)}" value="${esc(selected)}"></div><div class="field"><label>Hours for selected day</label><div class="payroll-hour-control"><button id="payrollMinus" type="button">−</button><div class="payroll-hour-display"><b id="payrollHoursLabel">${payrollHoursForDate(r.coach,selected).toFixed(2)} hrs</b><small id="payrollDaySubtext">${esc(payrollDayLabel(selected))}, ${esc(payrollDateLabel(selected))}</small></div><button id="payrollPlus" type="button">+</button></div></div></div><div class="payroll-day-strip">${dayButtons}</div><div class="payroll-estimate-grid"><div class="payroll-estimate-box"><b id="payrollPeriodHours">${r.trackedHours.toFixed(2)}</b><span>Tracked hours</span></div><div class="payroll-estimate-box"><b>${money(rate)}</b><span>Hourly rate</span></div><div class="payroll-estimate-box"><b id="payrollEstimateValue">${money(r.hourlyPayroll)}</b><span>Payroll estimate</span></div></div><div class="payroll-save-row"><span class="hint" id="payrollSaveHint">Server-backed payroll estimate. Unsaved edits stay local until Save Hours.</span><button class="btn primary" id="savePayrollHours">Save Hours</button></div></section>`
   }
   function bindPayrollHoursPanel(staffId,filters){
-    const select=document.getElementById('payrollDaySelect');if(!select)return;let selected=select.value;let working=payrollHoursForDate(coach(staffId),selected);
-    const refresh=()=>{const c=coach(staffId)||{};working=payrollHoursForDate(c,selected);select.value=selected;document.getElementById('payrollHoursLabel').textContent=working.toFixed(2)+' hrs';modal.querySelectorAll('[data-payroll-date]').forEach(btn=>{const d=btn.dataset.payrollDate;btn.classList.toggle('active',d===selected);btn.querySelector('span').textContent=`${new Date(d+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})} · ${payrollHoursForDate(c,d)}h`});const total=payrollTrackedHours(c,filters);document.getElementById('payrollPeriodHours').textContent=total.toFixed(2);document.getElementById('payrollEstimateValue').textContent=money(total*(Number(c.payRate)||0))};
-    const setWorking=value=>{working=numericHours(value);document.getElementById('payrollHoursLabel').textContent=working.toFixed(2)+' hrs'};
-    select.onchange=e=>{selected=e.target.value;refresh()};
-    modal.querySelectorAll('[data-payroll-date]').forEach(btn=>btn.onclick=()=>{selected=btn.dataset.payrollDate;refresh()});
+    const select=document.getElementById('payrollDaySelect');if(!select)return;
+    const staff=coach(staffId)||{};
+    const dates=dateRangeList(filters.start,filters.end);
+    const periodSet=new Set(dates);
+    const original=clone(payrollMapFor(staff));
+    let draft={...original};
+    let selected=select.value&&periodSet.has(select.value)?select.value:(dates[0]||select.value);
+    let working=numericHours(draft[selected]||0);
+    const refresh=(dirty=false)=>{
+      if(!periodSet.has(selected)&&dates.length)selected=dates[0];
+      working=numericHours(draft[selected]||0);
+      select.value=selected;
+      const label=document.getElementById('payrollHoursLabel');if(label)label.textContent=working.toFixed(2)+' hrs';
+      const sub=document.getElementById('payrollDaySubtext');if(sub)sub.textContent=`${payrollDayLabel(selected)}, ${payrollDateLabel(selected)}`;
+      modal.querySelectorAll('[data-payroll-date]').forEach(btn=>{const d=btn.dataset.payrollDate;btn.classList.toggle('active',d===selected);const span=btn.querySelector('span');if(span)span.textContent=`${payrollDateLabel(d)} · ${numericHours(draft[d]||0).toFixed(2)}h`});
+      const total=payrollDraftTotal(dates,draft);
+      const rate=Number((coach(staffId)||{}).payRate)||0;
+      const totalEl=document.getElementById('payrollPeriodHours');if(totalEl)totalEl.textContent=total.toFixed(2);
+      const estEl=document.getElementById('payrollEstimateValue');if(estEl)estEl.textContent=money(total*rate);
+      const status=document.getElementById('payrollServerStatus');if(status)status.textContent=dirty?`Unsaved changes · ${total.toFixed(2)} hrs`:`Server-synced · ${total.toFixed(2)} hrs`;
+      const hint=document.getElementById('payrollSaveHint');if(hint)hint.textContent=dirty?'Unsaved changes are highlighted here. Click Save Hours to store them server-side.':'Saved hours feed the employee dashboard and payroll exports.';
+    };
+    const setWorking=value=>{working=numericHours(value);if(working>0)draft[selected]=working;else delete draft[selected];refresh(true)};
+    select.onchange=e=>{selected=e.target.value;working=numericHours(draft[selected]||0);refresh(false)};
+    modal.querySelectorAll('[data-payroll-date]').forEach(btn=>btn.onclick=()=>{selected=btn.dataset.payrollDate;refresh(false)});
     document.getElementById('payrollMinus').onclick=()=>setWorking(working-.25);
     document.getElementById('payrollPlus').onclick=()=>setWorking(working+.25);
-    document.getElementById('savePayrollHours').onclick=async()=>{if(!userCan('editCompensation')&&!isAdmin()){toast('Payroll editing permission required.','error');return}await commit(mut=>{const c=mut.coaches.find(x=>x.id===staffId);if(!c)return;c.payrollHours=c.payrollHours&&typeof c.payrollHours==='object'?c.payrollHours:{};if(working>0)c.payrollHours[selected]=working;else delete c.payrollHours[selected]},'Payroll hours saved.');refresh()};
+    document.getElementById('savePayrollHours').onclick=async()=>{
+      if(!userCan('manageCompensation')&&!isAdmin()){toast('Payroll editing permission required.','error');return}
+      try{
+        await commit(mut=>{const c=mut.coaches.find(x=>x.id===staffId);if(!c)return;const merged=c.payrollHours&&typeof c.payrollHours==='object'?{...c.payrollHours}:{};for(const d of dates)delete merged[d];for(const d of dates){const hrs=numericHours(draft[d]||0);if(hrs>0)merged[d]=hrs}c.payrollHours=merged},'Payroll hours saved to server.');
+        openStaffDashboard(staffId,filters);
+      }catch(e){toast(e.message||'Payroll hours could not be saved.','error')}
+    };
+    refresh(false);
   }
   function openStaffDashboard(staffId,filters){
     const data=reportScope(filters), r=staffReportRows(data).find(x=>x.coach.id===staffId);if(!r){toast('Staff member is unavailable for this report.','error');openReports();return}
