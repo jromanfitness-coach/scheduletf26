@@ -675,7 +675,21 @@
   function reportScopeText(filters){const coachName=filters.coachId==='all'?'All active coaches':(coach(filters.coachId)?.name||'Selected coach');return `${prettyDate(filters.start)} - ${prettyDate(filters.end)} · ${coachName}`}
   function defaultReportPeriod(base=new Date()){const anchor=new Date(2026,6,2);anchor.setHours(0,0,0,0);const current=new Date(base.getFullYear(),base.getMonth(),base.getDate());const span=14;let diff=Math.floor((current-anchor)/86400000);if(diff<0)diff=0;const start=addDays(anchor,Math.floor(diff/span)*span);const end=addDays(start,13);return {start:iso(start),end:iso(end)}}
   function payrollPeriodFromStart(start){const anchor=new Date(2026,6,2);anchor.setHours(0,0,0,0);const base=start?new Date(start+'T12:00:00'):new Date();const target=new Date(base.getFullYear(),base.getMonth(),base.getDate());let diff=Math.floor((target-anchor)/86400000);if(diff<0)diff=0;const span=14;const periodStart=addDays(anchor,Math.floor(diff/span)*span);const periodEnd=addDays(periodStart,13);return {start:iso(periodStart),end:iso(periodEnd)}}
-  function payrollPeriodOptions(centerStart){const center=payrollPeriodFromStart(centerStart||defaultReportPeriod().start);const anchor=new Date(center.start+'T12:00:00');const options=[];for(let i=-4;i<=8;i++){const start=addDays(anchor,i*14), end=addDays(start,13);options.push({start:iso(start),end:iso(end),label:payrollPeriodLabel(iso(start),iso(end))})}return options}
+  function payrollPeriodOptions(centerStart,staff){
+    const center=payrollPeriodFromStart(centerStart||defaultReportPeriod().start);
+    const anchor=new Date(center.start+'T12:00:00');
+    const options=[];
+    const saved=payrollMapFor(staff||{});
+    for(let i=-12;i<=8;i++){
+      const start=addDays(anchor,i*14), end=addDays(start,13), s=iso(start), e=iso(end);
+      const dates=dateRangeList(s,e);
+      const hours=payrollDraftTotal(dates,saved);
+      const isCurrent=s===center.start;
+      const label=`${payrollPeriodLabel(s,e)}${isCurrent?' · Current':''}${hours>0?` · ${hours.toFixed(2)} saved hrs`:''}`;
+      options.push({start:s,end:e,label,hours,isCurrent});
+    }
+    return options
+  }
   function payrollPeriodLabel(start,end){const sd=new Date(start+'T12:00:00'), ed=new Date(end+'T12:00:00');const sm=sd.toLocaleDateString(undefined,{month:'numeric',day:'numeric'}), em=ed.toLocaleDateString(undefined,{month:'numeric',day:'numeric'});return `${sm} - ${em}`}
   function reportAttendanceTotals(rows){
     const total={booked:0,unmarked:0,present:0,rescheduled:0,cancelled:0,late:0,absent:0,excused:0};
@@ -797,20 +811,20 @@
     const rate=Number(r.coach.payRate)||0;
     const currentMap=payrollMapFor(r.coach);
     const periodHours=payrollDraftTotal(dates,currentMap);
-    const options=payrollPeriodOptions(period.start).map(o=>`<option value="${esc(o.start)}|${esc(o.end)}" ${o.start===period.start?'selected':''}>${esc(o.label)}</option>`).join('');
+    const historyCount=payrollPeriodOptions(period.start,r.coach).filter(o=>o.hours>0).length;
+    const options=payrollPeriodOptions(period.start,r.coach).map(o=>`<option value="${esc(o.start)}|${esc(o.end)}" ${o.start===period.start?'selected':''}>${esc(o.label)}</option>`).join('');
     const dayButtons=dates.map(d=>{const hrs=numericHours(currentMap[d]||0);return `<button class="payroll-day-tile ${d===selected?'active':''} ${hrs>0?'saved':''}" data-payroll-date="${esc(d)}"><b>${esc(payrollDayLabel(d))}</b><span>${esc(payrollDateLabel(d))} · ${hrs.toFixed(2)}h</span></button>`}).join('');
-    return `<section class="card payroll-hours-card"><div class="section-title"><h2>Payroll Hours Estimate</h2><span id="payrollServerStatus">Server-synced · ${periodHours.toFixed(2)} hrs</span></div><p class="hint">Simple payroll estimate for non-session staff hours. Choose a two-week pay period, select a day tile, type hours, then save to the shared server record.</p><div class="payroll-period-picker"><div class="field"><label>Time period</label><select id="payrollPeriodSelect" class="payroll-period-select">${options}</select></div><div class="field"><label>Hours for selected day</label><div class="payroll-typed-control"><input id="payrollHoursInput" class="payroll-hours-input" type="number" min="0" max="24" step="0.25" value="${payrollHoursForDate(r.coach,selected).toFixed(2)}"><span class="payroll-hours-suffix">hours</span></div></div></div><div class="payroll-period-summary"><span>Selected period</span><b id="payrollPeriodLabel">${esc(payrollPeriodLabel(period.start,period.end))}</b></div><div class="payroll-day-strip">${dayButtons}</div><div class="payroll-estimate-grid"><div class="payroll-estimate-box"><b id="payrollPeriodHours">${periodHours.toFixed(2)}</b><span>Tracked hours</span></div><div class="payroll-estimate-box"><b>${money(rate)}</b><span>Hourly rate</span></div><div class="payroll-estimate-box"><b id="payrollEstimateValue">${money(periodHours*rate)}</b><span>Payroll estimate</span></div></div><div class="payroll-save-row"><span class="hint" id="payrollSaveHint">Saved hours remain server-side for this pay period until edited again.</span><button class="btn primary" id="savePayrollHours">Save Hours</button></div></section>`
+    return `<section class="card payroll-hours-card"><div class="section-title"><h2>Payroll Hours Live Monitor</h2><span id="payrollServerStatus">Server-synced · ${periodHours.toFixed(2)} hrs</span></div><p class="hint">Saved hours stay visible by pay period. Use the dropdown to review current or past two-week periods, update a day, and save the period to the shared server record.</p><div class="payroll-period-picker"><div class="field"><label>Pay period history</label><select id="payrollPeriodSelect" class="payroll-period-select">${options}</select></div><div class="field"><label>Hours for selected day</label><div class="payroll-typed-control"><input id="payrollHoursInput" class="payroll-hours-input" type="number" min="0" max="24" step="0.25" value="${payrollHoursForDate(r.coach,selected).toFixed(2)}"><span class="payroll-hours-suffix">hours</span></div></div></div><div class="payroll-period-summary"><span>Selected period · ${historyCount} saved period${historyCount===1?'':'s'} available</span><b id="payrollPeriodLabel">${esc(payrollPeriodLabel(period.start,period.end))}</b></div><div class="payroll-day-strip">${dayButtons}</div><div class="payroll-estimate-grid"><div class="payroll-estimate-box"><b id="payrollPeriodHours">${periodHours.toFixed(2)}</b><span>Period hours</span></div><div class="payroll-estimate-box"><b>${money(rate)}</b><span>Hourly rate</span></div><div class="payroll-estimate-box"><b id="payrollEstimateValue">${money(periodHours*rate)}</b><span>Payroll estimate</span></div></div><div class="payroll-save-row"><span class="hint" id="payrollSaveHint">This period is loaded from the shared server record. Saved periods remain accessible from the dropdown.</span><button class="btn primary" id="savePayrollHours">Save Pay Period</button></div></section>`
   }
   function bindPayrollHoursPanel(staffId,filters){
     const periodSelect=document.getElementById('payrollPeriodSelect');if(!periodSelect)return;
-    const staff=coach(staffId)||{};
+    let staff=coach(staffId)||{};
     let [periodStart,periodEnd]=String(periodSelect.value||'').split('|');
     let dates=dateRangeList(periodStart,periodEnd);
-    const original=clone(payrollMapFor(staff));
+    let original=clone(payrollMapFor(staff));
     let draft={...original};
     let selected=dates.includes(filters.start)?filters.start:(dates[0]||periodStart);
     const input=document.getElementById('payrollHoursInput');
-    const periodKey=()=>`${periodStart}|${periodEnd}`;
     const isDirtyDate=d=>numericHours(draft[d]||0)!==numericHours(original[d]||0);
     const periodTotal=()=>payrollDraftTotal(dates,draft);
     const refresh=(dirty=false)=>{
@@ -825,22 +839,37 @@
       const estEl=document.getElementById('payrollEstimateValue');if(estEl)estEl.textContent=money(total*rate);
       const anyDirty=dates.some(isDirtyDate);
       const status=document.getElementById('payrollServerStatus');if(status)status.textContent=anyDirty?`Unsaved changes · ${total.toFixed(2)} hrs`:`Server-synced · ${total.toFixed(2)} hrs`;
-      const hint=document.getElementById('payrollSaveHint');if(hint)hint.textContent=anyDirty?'Unsaved day tiles are highlighted. Click Save Hours to store this pay period server-side.':'Saved hours stay server-side for this pay period until edited again.';
+      const hint=document.getElementById('payrollSaveHint');if(hint)hint.textContent=anyDirty?'Unsaved day tiles are highlighted. Click Save Pay Period to update this period server-side.':'Saved hours are loaded for this pay period. Use the dropdown to monitor earlier saved periods.';
     };
     const setSelectedHours=value=>{let hrs=numericHours(value);hrs=Math.min(24,Math.max(0,hrs));if(hrs>0)draft[selected]=hrs;else delete draft[selected];refresh(true)};
     input?.addEventListener('input',e=>setSelectedHours(e.target.value));
     input?.addEventListener('blur',()=>{if(input)input.value=numericHours(draft[selected]||0).toFixed(2)});
     modal.querySelectorAll('[data-payroll-date]').forEach(btn=>btn.onclick=()=>{selected=btn.dataset.payrollDate;if(input)input.value=numericHours(draft[selected]||0).toFixed(2);refresh(false);input?.focus?.();input?.select?.()});
-    periodSelect.onchange=e=>{[periodStart,periodEnd]=String(e.target.value||periodKey()).split('|');dates=dateRangeList(periodStart,periodEnd);selected=dates[0]||periodStart;openStaffDashboard(staffId,{...filters,start:periodStart,end:periodEnd})};
+    periodSelect.onchange=e=>{[periodStart,periodEnd]=String(e.target.value||'').split('|');dates=dateRangeList(periodStart,periodEnd);selected=dates[0]||periodStart;openStaffDashboard(staffId,{...filters,start:periodStart,end:periodEnd})};
     document.getElementById('savePayrollHours').onclick=async()=>{
       if(!userCan('manageCompensation')&&!isAdmin()){toast('Payroll editing permission required.','error');return}
+      const saveBtn=document.getElementById('savePayrollHours');
       try{
-        const saveBtn=document.getElementById('savePayrollHours');if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving…'}
-        await commit(mut=>{const c=mut.coaches.find(x=>x.id===staffId);if(!c)return;const merged=c.payrollHours&&typeof c.payrollHours==='object'?{...c.payrollHours}:{};for(const d of dates)delete merged[d];for(const d of dates){const hrs=numericHours(draft[d]||0);if(hrs>0)merged[d]=hrs}c.payrollHours=merged},'Payroll hours saved to server.');
-        const fresh=coach(staffId)||{};Object.keys(original).forEach(k=>delete original[k]);Object.assign(original,clone(payrollMapFor(fresh)));draft={...original};
+        if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving…'}
+        const next=clone(state);
+        const c=next.coaches.find(x=>x.id===staffId);
+        if(!c)throw new Error('Staff member not found.');
+        const merged=c.payrollHours&&typeof c.payrollHours==='object'?{...c.payrollHours}:{};
+        for(const d of dates)delete merged[d];
+        for(const d of dates){const hrs=numericHours(draft[d]||0);if(hrs>0)merged[d]=hrs}
+        c.payrollHours=merged;
+        const response=await api('',{method:'POST',body:JSON.stringify({action:'save',state:next,baseRevision:state.revision,reason:`payroll hours ${periodStart} to ${periodEnd}`})});
+        state=response.state;state.updatedAt=response.state.updatedAt;
+        staff=coach(staffId)||{};
+        original=clone(payrollMapFor(staff));
+        draft={...original};
+        toast(`Payroll hours saved for ${payrollPeriodLabel(periodStart,periodEnd)}.`);
         refresh(false);
-      }catch(e){toast(e.message||'Payroll hours could not be saved.','error')}
-      finally{const saveBtn=document.getElementById('savePayrollHours');if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Hours'}}
+        if(periodSelect){const current=`${periodStart}|${periodEnd}`;periodSelect.innerHTML=payrollPeriodOptions(periodStart,staff).map(o=>`<option value="${esc(o.start)}|${esc(o.end)}" ${`${o.start}|${o.end}`===current?'selected':''}>${esc(o.label)}</option>`).join('')}
+      }catch(e){
+        if(e.status===409&&e.data?.state){state=e.data.state;staff=coach(staffId)||{};original=clone(payrollMapFor(staff));draft={...original};refresh(false);toast('A newer server version was found. Payroll monitor reloaded; save again if needed.','error')}
+        else toast(e.message||'Payroll hours could not be saved.','error')
+      }finally{if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Pay Period'}}
     };
     refresh(false);
   }
