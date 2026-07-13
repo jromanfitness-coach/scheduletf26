@@ -116,7 +116,13 @@
 
   
     .payroll-hours-card{position:relative;overflow:hidden;background:radial-gradient(circle at 0 0,rgba(31,140,255,.18),transparent 42%),linear-gradient(145deg,rgba(16,26,38,.98),rgba(6,11,17,.98));border-color:rgba(100,180,255,.24)}.payroll-hours-card:before{content:"";position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(135deg,rgba(100,180,255,.18),transparent 38%,rgba(115,217,159,.12));pointer-events:none}.payroll-period-picker{display:grid;grid-template-columns:minmax(160px,.9fr) 1.2fr;gap:12px;align-items:end;margin-top:12px}.payroll-period-picker .field{min-width:0}.payroll-day-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:8px;margin:13px 0 12px}.payroll-day-tile{min-height:55px;border:1px solid rgba(255,255,255,.13);border-radius:14px;background:linear-gradient(145deg,rgba(255,255,255,.05),rgba(255,255,255,.02));color:var(--muted);font-weight:900;transition:.16s ease}.payroll-day-tile b{display:block;color:var(--cream);font-size:11px}.payroll-day-tile span{display:block;margin-top:4px;font-size:10px;color:var(--blue2)}.payroll-day-tile:hover{transform:translateY(-1px);border-color:rgba(100,180,255,.55);box-shadow:0 12px 22px rgba(31,140,255,.12)}.payroll-day-tile.active{border-color:rgba(115,217,159,.82);background:linear-gradient(145deg,rgba(115,217,159,.27),rgba(31,140,255,.14));box-shadow:0 0 30px rgba(115,217,159,.14),inset 0 1px 0 rgba(255,255,255,.20);color:var(--cream)}.payroll-hour-control{display:grid;grid-template-columns:44px 1fr 44px;gap:8px;align-items:center}.payroll-hour-control button{height:42px;border-radius:13px;border:1px solid rgba(100,180,255,.32);background:rgba(255,255,255,.04);color:var(--cream);font-size:22px;font-weight:950}.payroll-hour-display{min-height:42px;border:1px solid rgba(255,255,255,.12);border-radius:13px;background:rgba(0,0,0,.18);display:grid;place-items:center;text-align:center}.payroll-hour-display b{font-size:18px}.payroll-hour-display small{display:block;color:var(--muted);font-size:10px;margin-top:2px}.payroll-estimate-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.payroll-estimate-box{border:1px solid rgba(255,255,255,.10);border-radius:13px;padding:10px;background:rgba(0,0,0,.14)}.payroll-estimate-box b{display:block;font-size:16px}.payroll-estimate-box span{display:block;color:var(--muted);font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;margin-top:4px}.payroll-save-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px}.payroll-save-row .hint{font-size:11px}@media(max-width:720px){.payroll-period-picker{grid-template-columns:1fr}.payroll-estimate-grid{grid-template-columns:1fr}.payroll-hour-control{grid-template-columns:42px 1fr 42px}}
-</style>
+
+    .payroll-period-select{min-height:46px;border-radius:14px;border:1px solid rgba(100,180,255,.34);background:linear-gradient(145deg,rgba(31,140,255,.18),rgba(255,255,255,.04));color:var(--cream);font-size:14px;font-weight:900;padding:0 13px;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 14px 28px rgba(31,140,255,.08)}
+    .payroll-period-select:focus{border-color:rgba(100,180,255,.86);box-shadow:0 0 0 3px rgba(31,140,255,.14),0 18px 34px rgba(31,140,255,.14)}
+    .payroll-typed-control{display:grid;grid-template-columns:minmax(120px,1fr) auto;gap:8px;align-items:center}.payroll-hours-input{min-height:46px!important;border-radius:14px!important;text-align:center!important;font-size:18px!important;font-weight:950!important;background:linear-gradient(145deg,rgba(0,0,0,.28),rgba(31,140,255,.06))!important;border-color:rgba(100,180,255,.30)!important}.payroll-hours-suffix{min-height:46px;padding:0 13px;border:1px solid rgba(255,255,255,.10);border-radius:14px;background:rgba(255,255,255,.035);display:grid;place-items:center;color:var(--muted);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.07em}.payroll-day-tile.unsaved{border-color:rgba(255,209,102,.75);box-shadow:0 0 26px rgba(255,209,102,.14),inset 0 1px 0 rgba(255,255,255,.13)}
+    .payroll-day-tile.saved{border-color:rgba(115,217,159,.45)}.payroll-period-summary{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,255,255,.10);border-radius:14px;background:rgba(0,0,0,.13);color:var(--muted);font-size:11px;font-weight:800}.payroll-period-summary b{color:var(--cream)}
+
+  </style>
 </head>
 <body>
   <main id="root"></main>
@@ -667,7 +673,10 @@
   function reportStaffIdForSession(s){return s?.kind==='Management'&&s.managementOwnerId?s.managementOwnerId:s?.coachId}
   function reportCoachForSession(s){return coach(reportStaffIdForSession(s))||coach(s?.coachId)||{id:'',name:'Staff',role:'Coach'}}
   function reportScopeText(filters){const coachName=filters.coachId==='all'?'All active coaches':(coach(filters.coachId)?.name||'Selected coach');return `${prettyDate(filters.start)} - ${prettyDate(filters.end)} · ${coachName}`}
-  function defaultReportPeriod(base=new Date()){const anchor=new Date(2026,6,2);anchor.setHours(0,0,0,0);const current=new Date(base.getFullYear(),base.getMonth(),base.getDate());const span=15;let diff=Math.floor((current-anchor)/86400000);if(diff<0)diff=0;const start=addDays(anchor,Math.floor(diff/span)*span);const end=addDays(start,14);return {start:iso(start),end:iso(end)}}
+  function defaultReportPeriod(base=new Date()){const anchor=new Date(2026,6,2);anchor.setHours(0,0,0,0);const current=new Date(base.getFullYear(),base.getMonth(),base.getDate());const span=14;let diff=Math.floor((current-anchor)/86400000);if(diff<0)diff=0;const start=addDays(anchor,Math.floor(diff/span)*span);const end=addDays(start,13);return {start:iso(start),end:iso(end)}}
+  function payrollPeriodFromStart(start){const anchor=new Date(2026,6,2);anchor.setHours(0,0,0,0);const base=start?new Date(start+'T12:00:00'):new Date();const target=new Date(base.getFullYear(),base.getMonth(),base.getDate());let diff=Math.floor((target-anchor)/86400000);if(diff<0)diff=0;const span=14;const periodStart=addDays(anchor,Math.floor(diff/span)*span);const periodEnd=addDays(periodStart,13);return {start:iso(periodStart),end:iso(periodEnd)}}
+  function payrollPeriodOptions(centerStart){const center=payrollPeriodFromStart(centerStart||defaultReportPeriod().start);const anchor=new Date(center.start+'T12:00:00');const options=[];for(let i=-4;i<=8;i++){const start=addDays(anchor,i*14), end=addDays(start,13);options.push({start:iso(start),end:iso(end),label:payrollPeriodLabel(iso(start),iso(end))})}return options}
+  function payrollPeriodLabel(start,end){const sd=new Date(start+'T12:00:00'), ed=new Date(end+'T12:00:00');const sm=sd.toLocaleDateString(undefined,{month:'numeric',day:'numeric'}), em=ed.toLocaleDateString(undefined,{month:'numeric',day:'numeric'});return `${sm} - ${em}`}
   function reportAttendanceTotals(rows){
     const total={booked:0,unmarked:0,present:0,rescheduled:0,cancelled:0,late:0,absent:0,excused:0};
     rows.forEach(row=>row.bookings.forEach(b=>{const key=b.attendance||'unmarked';total.booked++;total[key]=(total[key]||0)+1}));
@@ -782,48 +791,56 @@
     draw();
   }
   function payrollHoursPanel(r,data){
-    const dates=dateRangeList(data.filters.start,data.filters.end);
-    const first=dates[0]||data.filters.start;
-    const selected=first;
+    const period=payrollPeriodFromStart(data.filters.start);
+    const dates=dateRangeList(period.start,period.end);
+    const selected=dates.includes(data.filters.start)?data.filters.start:(dates[0]||period.start);
     const rate=Number(r.coach.payRate)||0;
     const currentMap=payrollMapFor(r.coach);
-    const dayButtons=dates.map(d=>`<button class="payroll-day-tile ${d===selected?'active':''}" data-payroll-date="${esc(d)}"><b>${esc(payrollDayLabel(d))}</b><span>${esc(payrollDateLabel(d))} · ${numericHours(currentMap[d]||0).toFixed(2)}h</span></button>`).join('');
-    return `<section class="card payroll-hours-card"><div class="section-title"><h2>Payroll Hours Estimate</h2><span id="payrollServerStatus">Server-synced · ${r.trackedHours.toFixed(2)} hrs</span></div><p class="hint">Simple payroll estimate for non-session staff hours. Select a day, use + / − in 15-minute increments, then save to the shared server record.</p><div class="payroll-period-picker"><div class="field"><label>Selected day</label><input id="payrollDaySelect" type="date" min="${esc(data.filters.start)}" max="${esc(data.filters.end)}" value="${esc(selected)}"></div><div class="field"><label>Hours for selected day</label><div class="payroll-hour-control"><button id="payrollMinus" type="button">−</button><div class="payroll-hour-display"><b id="payrollHoursLabel">${payrollHoursForDate(r.coach,selected).toFixed(2)} hrs</b><small id="payrollDaySubtext">${esc(payrollDayLabel(selected))}, ${esc(payrollDateLabel(selected))}</small></div><button id="payrollPlus" type="button">+</button></div></div></div><div class="payroll-day-strip">${dayButtons}</div><div class="payroll-estimate-grid"><div class="payroll-estimate-box"><b id="payrollPeriodHours">${r.trackedHours.toFixed(2)}</b><span>Tracked hours</span></div><div class="payroll-estimate-box"><b>${money(rate)}</b><span>Hourly rate</span></div><div class="payroll-estimate-box"><b id="payrollEstimateValue">${money(r.hourlyPayroll)}</b><span>Payroll estimate</span></div></div><div class="payroll-save-row"><span class="hint" id="payrollSaveHint">Server-backed payroll estimate. Unsaved edits stay local until Save Hours.</span><button class="btn primary" id="savePayrollHours">Save Hours</button></div></section>`
+    const periodHours=payrollDraftTotal(dates,currentMap);
+    const options=payrollPeriodOptions(period.start).map(o=>`<option value="${esc(o.start)}|${esc(o.end)}" ${o.start===period.start?'selected':''}>${esc(o.label)}</option>`).join('');
+    const dayButtons=dates.map(d=>{const hrs=numericHours(currentMap[d]||0);return `<button class="payroll-day-tile ${d===selected?'active':''} ${hrs>0?'saved':''}" data-payroll-date="${esc(d)}"><b>${esc(payrollDayLabel(d))}</b><span>${esc(payrollDateLabel(d))} · ${hrs.toFixed(2)}h</span></button>`}).join('');
+    return `<section class="card payroll-hours-card"><div class="section-title"><h2>Payroll Hours Estimate</h2><span id="payrollServerStatus">Server-synced · ${periodHours.toFixed(2)} hrs</span></div><p class="hint">Simple payroll estimate for non-session staff hours. Choose a two-week pay period, select a day tile, type hours, then save to the shared server record.</p><div class="payroll-period-picker"><div class="field"><label>Time period</label><select id="payrollPeriodSelect" class="payroll-period-select">${options}</select></div><div class="field"><label>Hours for selected day</label><div class="payroll-typed-control"><input id="payrollHoursInput" class="payroll-hours-input" type="number" min="0" max="24" step="0.25" value="${payrollHoursForDate(r.coach,selected).toFixed(2)}"><span class="payroll-hours-suffix">hours</span></div></div></div><div class="payroll-period-summary"><span>Selected period</span><b id="payrollPeriodLabel">${esc(payrollPeriodLabel(period.start,period.end))}</b></div><div class="payroll-day-strip">${dayButtons}</div><div class="payroll-estimate-grid"><div class="payroll-estimate-box"><b id="payrollPeriodHours">${periodHours.toFixed(2)}</b><span>Tracked hours</span></div><div class="payroll-estimate-box"><b>${money(rate)}</b><span>Hourly rate</span></div><div class="payroll-estimate-box"><b id="payrollEstimateValue">${money(periodHours*rate)}</b><span>Payroll estimate</span></div></div><div class="payroll-save-row"><span class="hint" id="payrollSaveHint">Saved hours remain server-side for this pay period until edited again.</span><button class="btn primary" id="savePayrollHours">Save Hours</button></div></section>`
   }
   function bindPayrollHoursPanel(staffId,filters){
-    const select=document.getElementById('payrollDaySelect');if(!select)return;
+    const periodSelect=document.getElementById('payrollPeriodSelect');if(!periodSelect)return;
     const staff=coach(staffId)||{};
-    const dates=dateRangeList(filters.start,filters.end);
-    const periodSet=new Set(dates);
+    let [periodStart,periodEnd]=String(periodSelect.value||'').split('|');
+    let dates=dateRangeList(periodStart,periodEnd);
     const original=clone(payrollMapFor(staff));
     let draft={...original};
-    let selected=select.value&&periodSet.has(select.value)?select.value:(dates[0]||select.value);
-    let working=numericHours(draft[selected]||0);
+    let selected=dates.includes(filters.start)?filters.start:(dates[0]||periodStart);
+    const input=document.getElementById('payrollHoursInput');
+    const periodKey=()=>`${periodStart}|${periodEnd}`;
+    const isDirtyDate=d=>numericHours(draft[d]||0)!==numericHours(original[d]||0);
+    const periodTotal=()=>payrollDraftTotal(dates,draft);
     const refresh=(dirty=false)=>{
-      if(!periodSet.has(selected)&&dates.length)selected=dates[0];
-      working=numericHours(draft[selected]||0);
-      select.value=selected;
-      const label=document.getElementById('payrollHoursLabel');if(label)label.textContent=working.toFixed(2)+' hrs';
-      const sub=document.getElementById('payrollDaySubtext');if(sub)sub.textContent=`${payrollDayLabel(selected)}, ${payrollDateLabel(selected)}`;
-      modal.querySelectorAll('[data-payroll-date]').forEach(btn=>{const d=btn.dataset.payrollDate;btn.classList.toggle('active',d===selected);const span=btn.querySelector('span');if(span)span.textContent=`${payrollDateLabel(d)} · ${numericHours(draft[d]||0).toFixed(2)}h`});
-      const total=payrollDraftTotal(dates,draft);
+      if(!dates.includes(selected)&&dates.length)selected=dates[0];
+      const selectedHours=numericHours(draft[selected]||0);
+      if(input&&document.activeElement!==input)input.value=selectedHours.toFixed(2);
+      const periodLabel=document.getElementById('payrollPeriodLabel');if(periodLabel)periodLabel.textContent=payrollPeriodLabel(periodStart,periodEnd);
+      modal.querySelectorAll('[data-payroll-date]').forEach(btn=>{const d=btn.dataset.payrollDate, hrs=numericHours(draft[d]||0);btn.classList.toggle('active',d===selected);btn.classList.toggle('unsaved',isDirtyDate(d));btn.classList.toggle('saved',hrs>0&&!isDirtyDate(d));const span=btn.querySelector('span');if(span)span.textContent=`${payrollDateLabel(d)} · ${hrs.toFixed(2)}h`});
+      const total=periodTotal();
       const rate=Number((coach(staffId)||{}).payRate)||0;
       const totalEl=document.getElementById('payrollPeriodHours');if(totalEl)totalEl.textContent=total.toFixed(2);
       const estEl=document.getElementById('payrollEstimateValue');if(estEl)estEl.textContent=money(total*rate);
-      const status=document.getElementById('payrollServerStatus');if(status)status.textContent=dirty?`Unsaved changes · ${total.toFixed(2)} hrs`:`Server-synced · ${total.toFixed(2)} hrs`;
-      const hint=document.getElementById('payrollSaveHint');if(hint)hint.textContent=dirty?'Unsaved changes are highlighted here. Click Save Hours to store them server-side.':'Saved hours feed the employee dashboard and payroll exports.';
+      const anyDirty=dates.some(isDirtyDate);
+      const status=document.getElementById('payrollServerStatus');if(status)status.textContent=anyDirty?`Unsaved changes · ${total.toFixed(2)} hrs`:`Server-synced · ${total.toFixed(2)} hrs`;
+      const hint=document.getElementById('payrollSaveHint');if(hint)hint.textContent=anyDirty?'Unsaved day tiles are highlighted. Click Save Hours to store this pay period server-side.':'Saved hours stay server-side for this pay period until edited again.';
     };
-    const setWorking=value=>{working=numericHours(value);if(working>0)draft[selected]=working;else delete draft[selected];refresh(true)};
-    select.onchange=e=>{selected=e.target.value;working=numericHours(draft[selected]||0);refresh(false)};
-    modal.querySelectorAll('[data-payroll-date]').forEach(btn=>btn.onclick=()=>{selected=btn.dataset.payrollDate;refresh(false)});
-    document.getElementById('payrollMinus').onclick=()=>setWorking(working-.25);
-    document.getElementById('payrollPlus').onclick=()=>setWorking(working+.25);
+    const setSelectedHours=value=>{let hrs=numericHours(value);hrs=Math.min(24,Math.max(0,hrs));if(hrs>0)draft[selected]=hrs;else delete draft[selected];refresh(true)};
+    input?.addEventListener('input',e=>setSelectedHours(e.target.value));
+    input?.addEventListener('blur',()=>{if(input)input.value=numericHours(draft[selected]||0).toFixed(2)});
+    modal.querySelectorAll('[data-payroll-date]').forEach(btn=>btn.onclick=()=>{selected=btn.dataset.payrollDate;if(input)input.value=numericHours(draft[selected]||0).toFixed(2);refresh(false);input?.focus?.();input?.select?.()});
+    periodSelect.onchange=e=>{[periodStart,periodEnd]=String(e.target.value||periodKey()).split('|');dates=dateRangeList(periodStart,periodEnd);selected=dates[0]||periodStart;openStaffDashboard(staffId,{...filters,start:periodStart,end:periodEnd})};
     document.getElementById('savePayrollHours').onclick=async()=>{
       if(!userCan('manageCompensation')&&!isAdmin()){toast('Payroll editing permission required.','error');return}
       try{
+        const saveBtn=document.getElementById('savePayrollHours');if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving…'}
         await commit(mut=>{const c=mut.coaches.find(x=>x.id===staffId);if(!c)return;const merged=c.payrollHours&&typeof c.payrollHours==='object'?{...c.payrollHours}:{};for(const d of dates)delete merged[d];for(const d of dates){const hrs=numericHours(draft[d]||0);if(hrs>0)merged[d]=hrs}c.payrollHours=merged},'Payroll hours saved to server.');
-        openStaffDashboard(staffId,filters);
+        const fresh=coach(staffId)||{};Object.keys(original).forEach(k=>delete original[k]);Object.assign(original,clone(payrollMapFor(fresh)));draft={...original};
+        refresh(false);
       }catch(e){toast(e.message||'Payroll hours could not be saved.','error')}
+      finally{const saveBtn=document.getElementById('savePayrollHours');if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Hours'}}
     };
     refresh(false);
   }
@@ -844,7 +861,9 @@
     const staff=staffReportRows(data).filter(r=>!staffId||r.coach.id===staffId);if(!staff.length){toast('No staff data is available for this report.','error');return}
     const kpis=staffKpis(staff), title=staffId?`${staff[0].coach.name} - Staff Dashboard`:'Axon Performance - Staff Performance Dashboard';
     const cards=staff.map(r=>`<article class="staff"><h3>${esc(r.coach.name)}</h3><div class="role">${esc(r.coach.role)}</div><div class="grid"><div class="box"><b>${r.attendance.attended}</b><small>Total attendance</small></div><div class="box"><b>${r.completed}</b><small>Completed sessions</small></div><div class="box"><b>${r.signups.length}</b><small>New sign-ups</small></div></div><div class="line">Coaching commission <b>${money(r.coachingCommission)}</b></div><div class="line">Member incentive <b>${money(r.memberBonus)}</b></div><div class="line">Total commission <b>${money(r.totalCommission)}</b></div>${staffId?`<div class="detail"><table class="table"><thead><tr><th>Format</th><th>Completed</th><th>Attended</th><th>Rescheduled</th><th>Cancelled</th><th>Rate</th></tr></thead><tbody>${r.formats.map(f=>`<tr><td>${esc(f.kind)}</td><td>${f.completed}</td><td class="green">${f.attended}</td><td class="yellow">${f.rescheduled}</td><td class="red">${f.cancelled}</td><td>${f.rate}%</td></tr>`).join('')}</tbody></table></div>`:''}</article>`).join('');
-    const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${pdfStyle()}</style></head><body><main class="page"><header class="head"><div><img class="report-wordmark" src="${BRAND_ASSETS.wordmarkWhite}" alt="Axon Performance"><div class="ey">Axon Performance · Staff Reporting</div><div class="title">${esc(title)}</div><div class="sub">Total attendance, completed training sessions, coaching commission, and attributed new-member incentives.</div></div><div class="period">${esc(reportScopeText(data.filters))}</div></header><section class="kpis"><div class="kpi"><small>Total attendance</small><b>${kpis.attendance}</b><span>Attended client markers</span></div><div class="kpi"><small>Completed sessions</small><b>${kpis.completed}</b><span>${kpis.attendanceRate}% attendance rate</span></div><div class="kpi"><small>Coaching commission</small><b>${money(staff.reduce((n,r)=>n+r.coachingCommission,0))}</b><span>Per attended client</span></div><div class="kpi"><small>New member sign-ups</small><b>${kpis.signups}</b><span>Attributed to staff</span></div><div class="kpi"><small>Total incentives</small><b>${money(kpis.commission)}</b><span>Commission + member bonus</span></div></section><section class="staffs">${cards}</section><div class="foot">Generated ${esc(new Date().toLocaleString())} · Axon Performance Scheduling Command Center</div></main><script>window.onload=()=>setTimeout(()=>window.print(),220)<\/script></body></html>`;
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${pdfStyle()}
+
+  </style></head><body><main class="page"><header class="head"><div><img class="report-wordmark" src="${BRAND_ASSETS.wordmarkWhite}" alt="Axon Performance"><div class="ey">Axon Performance · Staff Reporting</div><div class="title">${esc(title)}</div><div class="sub">Total attendance, completed training sessions, coaching commission, and attributed new-member incentives.</div></div><div class="period">${esc(reportScopeText(data.filters))}</div></header><section class="kpis"><div class="kpi"><small>Total attendance</small><b>${kpis.attendance}</b><span>Attended client markers</span></div><div class="kpi"><small>Completed sessions</small><b>${kpis.completed}</b><span>${kpis.attendanceRate}% attendance rate</span></div><div class="kpi"><small>Coaching commission</small><b>${money(staff.reduce((n,r)=>n+r.coachingCommission,0))}</b><span>Per attended client</span></div><div class="kpi"><small>New member sign-ups</small><b>${kpis.signups}</b><span>Attributed to staff</span></div><div class="kpi"><small>Total incentives</small><b>${money(kpis.commission)}</b><span>Commission + member bonus</span></div></section><section class="staffs">${cards}</section><div class="foot">Generated ${esc(new Date().toLocaleString())} · Axon Performance Scheduling Command Center</div></main><script>window.onload=()=>setTimeout(()=>window.print(),220)<\/script></body></html>`;
     const printWindow=window.open('', '_blank', 'width=1240,height=860');if(!printWindow){toast('Allow pop-ups to save the dashboard as a PDF.','error');return}printWindow.document.open();printWindow.document.write(html);printWindow.document.close();
   }
   function excelHex(value,fallback='1F8CFF'){return String(value||fallback).replace('#','').toUpperCase()}
