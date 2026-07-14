@@ -1,0 +1,764 @@
+
+(() => {
+  const API='/.netlify/functions/scheduler-api';
+  const DAYS=['Mon','Tue','Wed','Thu','Fri'];
+  const TIMES=Array.from({length:16},(_,i)=>String(i+5).padStart(2,'0')+':00');
+  const params=new URLSearchParams(location.search);
+  const initialMode=params.has('gym')?'gym':params.has('live')?'live':'login';
+  const root=document.getElementById('root'), modal=document.getElementById('modal'), backdrop=document.getElementById('backdrop'), toastEl=document.getElementById('toast'), sessionHoverEl=document.getElementById('sessionHover');
+  const BRAND_NAME='Axon Performance';
+  const BRAND_ASSETS=Object.freeze({wordmarkWhite:new URL('assets/axon/axon-performance-white.svg',document.baseURI).href,wordmarkBlue:new URL('assets/axon/axon-performance-blue.svg',document.baseURI).href,insigniaWhite:new URL('assets/axon/axon-insignia-white.svg',document.baseURI).href,insigniaBlue:new URL('assets/axon/axon-insignia-blue.svg',document.baseURI).href});
+  const brandWordmark=(className='brand-wordmark')=>`<img class="${className}" src="${BRAND_ASSETS.wordmarkWhite}" alt="${BRAND_NAME}">`;
+  const brandInsignia=(className='brand-insignia')=>`<img class="${className}" src="${BRAND_ASSETS.insigniaWhite}" alt="${BRAND_NAME} insignia">`;
+  // Keep initial state declarations above helpers, but initialize date values only after the helper functions exist.
+  // The previous build evaluated monday()/iso() before their const declarations, which stopped the entire app from rendering.
+  let savedSchedulerUser=null;try{savedSchedulerUser=JSON.parse(sessionStorage.getItem('axon_scheduler_user')||'null')}catch{}
+  let mode=initialMode, state=null, token=sessionStorage.getItem('axon_scheduler_admin_token')||'', currentUser=savedSchedulerUser, activeCoachId=(savedSchedulerUser?.staffId||'jordan'), weekStart=null, gymDate='', poller=null, saving=false, drag=null;
+  const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const uid=()=>`${Date.now().toString(36)}_${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`;
+  const clone=o=>JSON.parse(JSON.stringify(o));
+  const iso=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).toISOString().slice(0,10);
+  const monday=d=>{const x=new Date(d);x.setHours(0,0,0,0);const shift=(x.getDay()+6)%7;x.setDate(x.getDate()-shift);return x};
+  const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+  weekStart=monday(new Date());
+  gymDate=iso(new Date());
+  const dateFor=(base,index)=>iso(addDays(base,index));
+  const dayName=date=>DAYS[(new Date(date+'T12:00:00').getDay()+6)%7];
+  const prettyTime=t=>{const [h,m]=t.split(':').map(Number);return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`};
+  const prettyDate=d=>new Date(d+'T12:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+  const monthDay=d=>new Date(d+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  const fmtDateTime=d=>new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  function toast(text,kind=''){toastEl.textContent=text;toastEl.className=`toast show ${kind}`;clearTimeout(toastEl._t);toastEl._t=setTimeout(()=>toastEl.className='toast',3000)}
+  async function api(path='',options={}){
+    const headers={'Content-Type':'application/json',...(options.headers||{})}; if(token)headers.Authorization=`Bearer ${token}`;
+    let res;
+    try{
+      res=await fetch(API+path,{...options,headers,cache:'no-store'});
+    }catch(networkError){
+      const err=new Error('Unable to reach the scheduler server. Please retry in a few seconds.');
+      err.status=0; throw err;
+    }
+    const body=await res.json().catch(()=>({ok:false,error:'The scheduler server returned an unexpected response.'}));
+    if(!res.ok||body.ok===false){const err=new Error(body.error||'Scheduler server request failed.');err.status=res.status;err.data=body;throw err}
+    return body;
+  }
+  function coach(id){return state?.coaches?.find(c=>c.id===id)||state?.coaches?.[0]||null}
+  function type(id){return state?.classTypes?.find(t=>t.id===id)||state?.classTypes?.[0]||{name:'Session',color:'#1F8CFF',duration:60,visible:true}}
+  function clientsForSession(id){return (state.bookings||[]).filter(b=>b.sessionId===id&&['approved','confirmed'].includes(b.status||'approved')).map(b=>state.clients?.find(c=>c.id===b.clientId)||b.client||{}).filter(Boolean)}
+  const ATTENDANCE=['unmarked','present','rescheduled','cancelled','late','absent','excused'];
+  const ATTENDANCE_CYCLE=['unmarked','present','rescheduled','cancelled'];
+  const attendanceLabel=v=>({unmarked:'Attendance',present:'Attended',rescheduled:'Rescheduled',cancelled:'Cancelled',late:'Late',absent:'Absent',excused:'Excused'}[v]||'Attendance');
+  const attendanceVisual=v=>({late:'present',absent:'cancelled',excused:'rescheduled'}[v]||v||'unmarked');
+  const nextAttendance=v=>{const current=attendanceVisual(v);return ATTENDANCE_CYCLE[(ATTENDANCE_CYCLE.indexOf(current)+1)%ATTENDANCE_CYCLE.length]};
+  function attendanceButton(status,clientId){const visual=attendanceVisual(status);return `<button class="attendance-cycle is-${esc(visual)}" data-cycle-attendance-client="${esc(clientId)}" title="Click to cycle: Attendance → Attended → Rescheduled → Cancelled"><span class="attendance-dot"></span>${esc(attendanceLabel(visual))}</button>`}
+  function bookingFor(sessionId,clientId){return (state.bookings||[]).find(b=>b.sessionId===sessionId&&b.clientId===clientId)||null}
+  function bookedCount(s){return s.bookedCount ?? clientsForSession(s.id).length}
+  function isAvailable(coachId,date,time){const exact=state?.availabilityOverrides?.[coachId]?.[date]?.[time];if(typeof exact==='boolean')return exact;return !!state?.availability?.[coachId]?.[dayName(date)]?.[time]}
+  function sessionsAt(date,time,coachId){return (state?.sessions||[]).filter(s=>s.date===date&&s.time===time&&s.coachId===coachId&&s.status!=='canceled')}
+  function activeCoaches(){return (state?.coaches||[]).filter(c=>c.active!==false)}
+  function decodeTokenPayload(){try{if(!token||!token.includes('.'))return null;return JSON.parse(atob(token.split('.')[0].replace(/-/g,'+').replace(/_/g,'/')))}catch{return null}}
+  function roleDefaults(role='Coach'){const admin=role==='Admin / Coach';return {isAdmin:admin,managePermissions:admin,manageSchedule:admin||role==='Coach',manageAvailability:admin||role==='Coach'||role==='Manager',manageClients:admin||role==='Manager',viewOwnReports:true,viewAllReports:admin,exportReports:admin,manageCompensation:admin,approveRequests:admin||role==='Manager'}}
+  function staffPermissions(c={}){return {...roleDefaults(c.role||'Coach'),...(c.permissions||{})}}
+  function activeUser(){const payload=decodeTokenPayload()||{};const staffId=currentUser?.staffId||payload.staffId||'jordan';const staff=(state?.coaches||[]).find(c=>c.id===staffId);const base={staffId,name:staff?.name||currentUser?.name||'Jordan',role:staff?.role||currentUser?.role||'Admin / Coach',permissions:staffPermissions(staff||currentUser||{role:'Admin / Coach'})};return {...base,...(currentUser||{}),permissions:{...base.permissions,...(currentUser?.permissions||payload.permissions||{})}}}
+  function isAdmin(){const u=activeUser();return mode==='coach'&&!!token&&!!u.permissions?.isAdmin}
+  function userCan(key){const u=activeUser();return isAdmin()||!!u.permissions?.[key]}
+  function userStaffId(){return activeUser().staffId||'jordan'}
+  function canViewReportsFor(id){return isAdmin()||userCan('viewAllReports')||id===userStaffId()}
+  function reportableCoaches(){return activeCoaches().filter(c=>canViewReportsFor(c.id))}
+  function syncPill(){const s=state?.updatedAt?`Saved ${new Date(state.updatedAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'Connecting…';return `<span class="pill ${saving?'warn':''}"><span class="dot"></span>${saving?'Saving securely…':esc(s)}</span>`}
+  function clientNames(s){const names=clientsForSession(s.id).map(c=>c.name).filter(Boolean);if(!names.length)return '';const visible=names.slice(0,3);const rest=names.length-visible.length;return `${visible.join(' · ')}${rest?` +${rest}`:''}`}
+  function tile(s,context='coach'){
+    const t=type(s.classTypeId), c=coach(s.coachId), count=bookedCount(s), publicTile=context!=='coach';
+    return `<article class="${context==='gym'?'gym-tile':'session-tile'}" ${context==='coach'?'draggable="true"':''} data-session="${esc(s.id)}" style="--type:${esc(t.color||'#1F8CFF')};--type-glow:${esc((t.color||'#1F8CFF')+'55')}">${context==='gym'?`<div><strong>${esc(t.name)}</strong><small>${esc(s.kind||'Group')} · ${count}/${s.capacity||10}</small></div>`:`<div class="title-row"><strong>${esc(t.name)}</strong><span class="format">${esc(s.kind||'Group')}</span></div>${context==='coach'&&clientNames(s)?`<div class="names">${esc(clientNames(s))}</div>`:''}<div class="meta"><span>${context==='coach'?esc(c?.name||'Coach'):`${count}/${s.capacity||10} spots`}</span><span>${context==='coach'?`${s.durationMinutes||60} min`:''}</span></div>`}</article>`;
+  }
+  function header(){
+    const pending=(state?.requests||[]).filter(r=>r.status==='requested').length;
+    const title=mode==='gym'?'Gym View':mode==='live'?'Client Live Feed':'Scheduling Command Center';
+    const eyebrow=mode==='gym'?'Live company schedule':mode==='live'?'Live availability · request only':'Coach workspace';
+    return `<header class="topbar"><div class="brand"><div class="brand-lockup">${brandWordmark()}</div><div class="brand-copy"><div class="eyebrow">${eyebrow}</div><h1>${title}</h1></div></div><div class="top-actions">${mode==='coach'?`${syncPill()}<button class="btn ${pending?'requests-active':'requests-idle'}" id="requestsBtn">Requests${pending?` (${pending})`:''}</button><button class="btn" id="gymBtn">Gym View</button><button class="btn primary" id="reportBtn">Reports</button><button class="btn" id="backupBtn">Backups</button><button class="btn" id="availabilityBtn">Availability</button>${isAdmin()?'<button class="btn permission-admin" id="permissionsBtn">Permissions</button>':''}<button class="btn" id="clientsBtn">Clients</button><button class="btn ghost" id="logoutBtn">Logout</button>`:mode==='live'?`<span class="pill"><span class="dot"></span>Live schedule</span><a class="btn ghost" href="?gym=1">Gym View</a>`:`<span class="pill"><span class="dot"></span>Live schedule</span><a class="btn ghost" href="?live=1">Client Feed</a>`}</div></header>`;
+  }
+  function legacyDate(day, weekOffset=0){
+    const base=monday(new Date());
+    const index=Math.max(0,DAYS.indexOf(day));
+    return iso(addDays(base,index+(Math.max(0,Number(weekOffset)||0)*7)));
+  }
+  function convertLegacyState(legacy, server){
+    const next=clone(server);
+    const oldCoaches=Array.isArray(legacy.coaches)?legacy.coaches:[];
+    const coaches=oldCoaches.length?oldCoaches.map((c,i)=>({id:c.id||`legacy_coach_${i+1}`,name:c.name||`Coach ${i+1}`,role:['Admin / Coach','Coach','Manager'].includes(c.role)?c.role:'Coach',active:c.active!==false})):next.coaches;
+    if(!coaches.some(c=>c.id==='jordan')) coaches.unshift({id:'jordan',name:'Jordan',role:'Admin / Coach',active:true});
+    next.coaches=coaches;
+    next.availability={};
+    for(const c of coaches){
+      const source=oldCoaches.find(x=>(x.id||'')===c.id)?.availability || legacy.availability || {};
+      next.availability[c.id]={};
+      for(const day of DAYS){next.availability[c.id][day]={};for(const tm of TIMES)next.availability[c.id][day][tm]=Boolean(source?.[day]?.[tm]);}
+    }
+    if(Array.isArray(legacy.classTypes)&&legacy.classTypes.length){next.classTypes=legacy.classTypes.map((t,i)=>({id:t.id||`legacy_type_${i+1}`,name:t.name||`Type ${i+1}`,intensity:t.intensity||'Training',desc:t.desc||'',duration:+t.duration||60,color:t.color||'#1F8CFF',visible:t.visible!==false,active:t.active!==false}));}
+    const coachIdFor=name=>coaches.find(c=>c.name===name)?.id||coaches[0].id;
+    const typeIds=new Set(next.classTypes.map(t=>t.id));
+    next.sessions=(legacy.sessions||[]).map((item,i)=>({
+      id:item.id||`legacy_session_${i+1}`,
+      classTypeId:typeIds.has(item.classTypeId)?item.classTypeId:next.classTypes[0]?.id,
+      kind:item.kind||'Group',
+      date:item.date||legacyDate(item.day||'Mon',item.weekOffset||0),
+      time:item.time||'06:00',
+      coachId:item.coachId||coachIdFor(item.coach||'Jordan'),
+      capacity:+item.capacity||((item.kind==='1-on-1')?1:(item.kind==='Semi-Private'?4:10)),
+      durationMinutes:+item.durationMinutes||(+next.classTypes.find(t=>t.id===item.classTypeId)?.duration||60),
+      status:item.status||'active',notes:item.notes||'',repeatWeeks:0,repeatDays:[],createdAt:item.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()
+    }));
+    next.clients=(legacy.clients||[]).map((c,i)=>({id:c.id||`legacy_client_${i+1}`,name:c.name||'',email:c.email||'',phone:c.phone||'',package:c.package||'Unassigned',chargeDate:c.chargeDate||'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}));
+    const sessionIds=new Set(next.sessions.map(x=>x.id));
+    for(const b of legacy.bookings||[]){
+      let clientId=b.clientId;
+      let c=next.clients.find(x=>x.id===clientId) || next.clients.find(x=>b.email&&x.email===b.email);
+      if(!c){c={id:uid(),name:b.name||'Client',email:b.email||'',phone:b.phone||'',package:'Unassigned',chargeDate:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};next.clients.push(c)}
+      if(sessionIds.has(b.sessionId))next.bookings.push({id:b.id||uid(),sessionId:b.sessionId,clientId:c.id,status:b.status||'approved',createdAt:b.createdAt||new Date().toISOString()});
+    }
+    return next;
+  }
+  async function migrateLegacyIfNeeded(server){
+    const migrationFlag='tf_scheduler_v22_legacy_migrated';
+    if(sessionStorage.getItem(migrationFlag)) return server;
+    const raw=localStorage.getItem('tf_scheduler_v5');
+    if(!raw || server.revision!==1 || server.sessions.length || server.clients.length || server.bookings.length || server.requests.length) return server;
+    try{
+      const legacy=JSON.parse(raw);
+      if(!Array.isArray(legacy.sessions)&&!Array.isArray(legacy.classTypes)) return server;
+      const imported=convertLegacyState(legacy,server);
+      const r=await api('',{method:'POST',body:JSON.stringify({action:'save',state:imported,baseRevision:server.revision,reason:'legacy v21 browser migration'})});
+      sessionStorage.setItem(migrationFlag,'1');
+      toast('Legacy schedule imported into secure server storage.');
+      return r.state;
+    }catch(e){console.warn('Legacy migration skipped',e);return server}
+  }
+  function renderLogin(){root.innerHTML=`<section class="login"><div class="login-card"><div class="login-brand-lockup">${brandWordmark('login-wordmark')}</div><div class="eyebrow" style="margin-top:15px">Private staff access</div><h1>Scheduling Command Center</h1><p class="login-copy">Coach/Admin access controls schedules, clients, availability, requests, backups, and company views. Client access is separate and request-only.</p><div class="field"><label>Coach/Admin PIN</label><input id="pinInput" type="password" autocomplete="current-password" placeholder="Enter access PIN"></div><div class="login-actions"><button class="btn primary" id="loginBtn">Coach/Admin Login</button><a class="btn ghost" href="?live=1">Client Live Feed</a></div><p class="server-note">Protected server storage · automatic backups · shared live schedule</p></div></section>`;document.getElementById('loginBtn').onclick=login;document.getElementById('pinInput').addEventListener('keydown',e=>{if(e.key==='Enter')login()})}
+  async function login(){
+    const pin=document.getElementById('pinInput').value;
+    const button=document.getElementById('loginBtn');
+    if(button){button.disabled=true;button.textContent='Signing in…'}
+    try{
+      const r=await api('',{method:'POST',body:JSON.stringify({action:'login',pin})});
+      token=r.token;sessionStorage.setItem('axon_scheduler_admin_token',token);
+      currentUser=r.user||decodeTokenPayload()||{staffId:'jordan',name:'Jordan',role:'Admin / Coach',permissions:roleDefaults('Admin / Coach')};sessionStorage.setItem('axon_scheduler_user',JSON.stringify(currentUser));
+      state=await migrateLegacyIfNeeded(r.state);
+      activeCoachId=currentUser.staffId||state.coaches[0]?.id||'jordan';mode='coach';startPolling();render();toast(`${currentUser.name||'Staff'} workspace unlocked.`);
+    }catch(e){
+      toast(e.message||'Unable to sign in.','error');
+    }finally{
+      const current=document.getElementById('loginBtn');
+      if(current){current.disabled=false;current.textContent='Coach/Admin Login'}
+    }
+  }
+  function sidebar(){const current=coach(activeCoachId)||activeCoaches()[0];const classes=(state.classTypes||[]).filter(t=>t.active!==false);return `<aside class="panel"><div class="panel-pad"><div class="stats"><div class="stat"><b>${(state.sessions||[]).filter(s=>s.date>=dateFor(weekStart,0)&&s.date<=dateFor(weekStart,4)).length}</b><small>This week</small></div><div class="stat"><b>${(state.requests||[]).filter(r=>r.status==='requested').length}</b><small>Requests</small></div></div><div class="coach-switch"><div class="coach-switch-inner"><div class="coach-switch-kicker">Active Coach</div><div class="coach-switch-row"><select id="coachSelect">${activeCoaches().map(c=>`<option value="${esc(c.id)}" ${c.id===current?.id?'selected':''}>${esc(c.name)} · ${esc(c.role)}</option>`).join('')}</select><span class="coach-switch-arrow">⌄</span></div><div class="coach-switch-meta"><span>${esc(current?.role||'Coach')}</span><span>Schedule view</span></div></div></div><div class="section-title"><h2>Class Types</h2><span>Drag to schedule</span></div><div class="class-type-grid">${classes.map(t=>`<div class="type-card" draggable="true" data-type="${esc(t.id)}" style="--type:${esc(t.color)};--type-glow:${esc(t.color+'44')}" title="Drag ${esc(t.name)} onto the calendar"><div class="type-content"><strong>${esc(t.name)}</strong><small>${esc(t.intensity||'Training')}</small></div><button class="type-edit" type="button" data-edit-type="${esc(t.id)}" aria-label="Edit ${esc(t.name)}" title="Edit class type"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></div>`).join('')}<button class="type-card new-type" type="button" id="newTypeBtn" style="--type:#64B4FF;--type-glow:#64B4FF44"><div class="type-content"><strong>+ New Type</strong><small>Create a custom class type</small></div></button></div><div class="divider"></div><div class="section-title"><h2>Recent Requests</h2><span>server synced</span></div><div class="recent-list">${(state.requests||[]).filter(r=>r.status==='requested').slice(0,4).map(r=>`<div class="recent"><b>${esc(r.client?.name||r.name||'Client')}</b><p>${esc(r.date||'Requested time')} ${r.time?`· ${prettyTime(r.time)}`:''}<br>${esc(r.kind||'Session')} request</p></div>`).join('')||'<div class="empty">No pending requests.</div>'}</div></div></aside>`}
+  function weekCalendar(){
+    const dates=DAYS.map((_,i)=>dateFor(weekStart,i));
+    let html=`<div class="calendar-header"><div><div class="calendar-title">${prettyDate(dates[0])} — ${prettyDate(dates[4])}</div><div class="calendar-subtitle">Drag a class type to an available block, or click an available block to create a session.</div></div><div class="top-actions"><button class="btn ghost" data-week="-1">← Week</button><button class="btn ghost" data-week="0">This Week</button><button class="btn ghost" data-week="1">Week →</button></div></div><div class="calendar-shell"><section class="week-calendar"><div class="cal-head">Time</div>${dates.map((d,i)=>`<div class="cal-head">${DAYS[i]}<small>${new Date(d+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}</small></div>`).join('')}`;
+    for(const time of TIMES){html+=`<div class="time-cell">${prettyTime(time)}</div>`;for(const date of dates){const ss=sessionsAt(date,time,activeCoachId);const available=isAvailable(activeCoachId,date,time);html+=`<div class="day-cell ${available?'available':''}" data-slot-date="${date}" data-slot-time="${time}">${ss.map(s=>tile(s,'coach')).join('')}</div>`}}
+    return html+'</section></div>';
+  }
+  function liveCalendar(){
+    const dates=DAYS.map((_,i)=>dateFor(weekStart,i));
+    let html=`<div class="calendar-header"><div><div class="calendar-title">Live availability</div><div class="calendar-subtitle">Request a listed session or any available time. A coach approves all requests.</div></div><div class="top-actions"><button class="btn ghost" data-week="-1">← Week</button><button class="btn ghost" data-week="0">This Week</button><button class="btn ghost" data-week="1">Week →</button></div></div><div class="calendar-shell live"><section class="week-calendar"><div class="cal-head">Time</div>${dates.map((d,i)=>`<div class="cal-head">${DAYS[i]}<small>${new Date(d+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}</small></div>`).join('')}`;
+    for(const time of TIMES){html+=`<div class="time-cell">${prettyTime(time)}</div>`;for(const date of dates){const publicSessions=(state.sessions||[]).filter(s=>s.date===date&&s.time===time&&s.status==='active'&&type(s.classTypeId).visible);const anyAvail=activeCoaches().some(c=>isAvailable(c.id,date,time));html+=`<div class="day-cell ${anyAvail?'available':''}" data-public-date="${date}" data-public-time="${time}">${publicSessions.map(s=>tile(s,'live')).join('')}${anyAvail&&!publicSessions.length?'<button class="slot-request">Request this time</button>':''}</div>`}}
+    return html+'</section></div>';
+  }
+  function gymCalendar(){
+    const active=activeCoaches();let html=`<div class="gym-top"><div><div class="calendar-title">${prettyDate(gymDate)}</div><div class="calendar-subtitle">Live staff schedule · company view</div></div><div class="top-actions"><button class="btn ghost" data-gym-day="-1">← Day</button><button class="btn ghost" data-gym-today="1">Today</button><button class="btn ghost" data-gym-day="1">Day →</button></div></div><div class="gym-grid-shell"><section class="gym-grid" style="--coach-count:${active.length}"><div class="gym-head">Time</div>${active.map(c=>`<div class="gym-head"><b>${esc(c.name)}</b><small>${esc(c.role)}</small></div>`).join('')}`;
+    for(const tm of TIMES){html+=`<div class="gym-time">${prettyTime(tm)}</div>`;for(const c of active){const ss=sessionsAt(gymDate,tm,c.id);html+=`<div class="gym-slot ${isAvailable(c.id,gymDate,tm)?'available':''}">${ss.map(s=>tile(s,'gym')).join('')}</div>`}}
+    return html+'</section></div>';
+  }
+  function render(){if(mode==='login')return renderLogin();if(!state){root.innerHTML=`<section class="login"><div class="login-card"><div class="login-brand-lockup">${brandWordmark('login-wordmark')}</div><h1>Connecting…</h1></div></section>`;return}const content=mode==='coach'?`<section class="layout">${sidebar()}<main class="panel"><div class="calendar-wrap">${weekCalendar()}</div></main></section>`:mode==='live'?`<main class="panel"><div class="calendar-wrap">${liveCalendar()}</div></main>`:`<main class="panel"><div class="gym-stage">${gymCalendar()}</div></main>`;root.innerHTML=`<div class="app">${header()}${content}</div>`;bindPage()}
+  function sessionHoverMarkup(s){
+    const t=type(s.classTypeId), c=coach(s.coachId), booked=clientsForSession(s.id), capacity=Math.max(1,+s.capacity||1);
+    const names=booked.map(x=>x.name||'Client').filter(Boolean);
+    const visible=names.slice(0,3), extra=Math.max(0,names.length-visible.length);
+    const status=String(s.status||'active').replace(/^./,x=>x.toUpperCase());
+    return `<div class="hover-head"><div class="hover-title"><b>${esc(t.name||'Session')}</b><small>${prettyDate(s.date)} · ${prettyTime(s.time)} · ${esc(c?.name||'Coach')}</small></div><span class="hover-kind">${esc(s.kind||'Group')}</span></div><div class="hover-metrics"><div class="hover-metric"><b>${booked.length}/${capacity}</b><small>Booked</small></div><div class="hover-metric"><b>${s.durationMinutes||60}m</b><small>Duration</small></div><div class="hover-metric"><b>${esc(status)}</b><small>Status</small></div></div><div class="hover-clients">${visible.length?visible.map(name=>`<span class="hover-client">${esc(name)}</span>`).join(''):`<span class="hover-client empty">No clients booked</span>`}${extra?`<span class="hover-more">+${extra}</span>`:''}</div><div class="hover-foot"><span>${s.notes?esc(s.notes).slice(0,54)+(String(s.notes).length>54?'…':''):'No session notes'}</span><span>Click to edit</span></div>`;
+  }
+  function positionSessionHover(event){
+    if(!sessionHoverEl.classList.contains('show'))return;
+    const pad=14, rect=sessionHoverEl.getBoundingClientRect();
+    let left=event.clientX+18, top=event.clientY+18;
+    if(left+rect.width>window.innerWidth-pad) left=event.clientX-rect.width-18;
+    if(top+rect.height>window.innerHeight-pad) top=event.clientY-rect.height-18;
+    sessionHoverEl.style.left=`${Math.max(pad,left)}px`;
+    sessionHoverEl.style.top=`${Math.max(pad,top)}px`;
+  }
+  function showSessionHover(event,session){
+    if(drag||event.buttons)return;
+    const t=type(session.classTypeId);
+    sessionHoverEl.style.setProperty('--hover-color',t.color||'#1F8CFF');
+    sessionHoverEl.style.setProperty('--hover-glow',(t.color||'#1F8CFF')+'66');
+    sessionHoverEl.innerHTML=sessionHoverMarkup(session);
+    sessionHoverEl.classList.add('show');
+    positionSessionHover(event);
+  }
+  function hideSessionHover(){sessionHoverEl.classList.remove('show');}
+  function bindSessionHover(){
+    document.querySelectorAll('.session-tile[draggable="true"]').forEach(el=>{
+      const session=state.sessions.find(s=>s.id===el.dataset.session);
+      if(!session)return;
+      el.addEventListener('mouseenter',event=>showSessionHover(event,session));
+      el.addEventListener('mousemove',event=>positionSessionHover(event));
+      el.addEventListener('mouseleave',hideSessionHover);
+      el.addEventListener('dragstart',hideSessionHover);
+      el.addEventListener('mousedown',event=>{if(event.buttons)hideSessionHover()});
+    });
+  }
+  function bindPage(){
+    document.getElementById('logoutBtn')?.addEventListener('click',()=>{token='';currentUser=null;sessionStorage.removeItem('axon_scheduler_admin_token');sessionStorage.removeItem('axon_scheduler_user');stopPolling();mode='login';state=null;render()});
+    document.getElementById('gymBtn')?.addEventListener('click',()=>window.open('?gym=1','_blank','noopener'));
+    document.getElementById('reportBtn')?.addEventListener('click',openReports);
+    document.getElementById('backupBtn')?.addEventListener('click',openBackups);
+    document.getElementById('availabilityBtn')?.addEventListener('click',openAvailability);
+    document.getElementById('permissionsBtn')?.addEventListener('click',openPermissions);
+    document.getElementById('clientsBtn')?.addEventListener('click',openClients);
+    document.getElementById('requestsBtn')?.addEventListener('click',openRequests);
+    document.getElementById('coachSelect')?.addEventListener('change',e=>{activeCoachId=e.target.value;render()});
+    document.getElementById('newTypeBtn')?.addEventListener('click',()=>openType());
+    document.querySelectorAll('[data-edit-type]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openType(b.dataset.editType)}));
+    document.querySelectorAll('[data-week]').forEach(b=>b.addEventListener('click',()=>{const n=+b.dataset.week;weekStart=n===0?monday(new Date()):addDays(weekStart,n*7);render()}));
+    document.querySelectorAll('[data-gym-day]').forEach(b=>b.addEventListener('click',()=>{gymDate=iso(addDays(new Date(gymDate+'T12:00:00'),+b.dataset.gymDay));render()}));
+    document.querySelector('[data-gym-today]')?.addEventListener('click',()=>{gymDate=iso(new Date());render()});
+    document.querySelectorAll('[data-slot-date]').forEach(cell=>{cell.addEventListener('click',e=>{if(e.target.closest('.session-tile'))return;const date=cell.dataset.slotDate,time=cell.dataset.slotTime;if(isAvailable(activeCoachId,date,time))openSession({date,time,coachId:activeCoachId})});cell.addEventListener('dragover',e=>{if(isAvailable(activeCoachId,cell.dataset.slotDate,cell.dataset.slotTime)){e.preventDefault();cell.classList.add('drag-over')}});cell.addEventListener('dragleave',()=>cell.classList.remove('drag-over'));cell.addEventListener('drop',e=>{e.preventDefault();cell.classList.remove('drag-over');const payload=parseDrag(e);if(!payload)return;const date=cell.dataset.slotDate,time=cell.dataset.slotTime;if(payload.kind==='type')openSession({date,time,coachId:activeCoachId,classTypeId:payload.id});if(payload.kind==='session')moveSession(payload.id,date,time,activeCoachId)})});
+    document.querySelectorAll('[data-type]').forEach(el=>{el.addEventListener('dragstart',e=>{drag={kind:'type',id:el.dataset.type};e.dataTransfer.setData('text/plain',JSON.stringify(drag));e.dataTransfer.effectAllowed='copy'});el.addEventListener('dragend',()=>drag=null)});
+    document.querySelectorAll('.session-tile[draggable="true"]').forEach(el=>{el.addEventListener('dragstart',e=>{drag={kind:'session',id:el.dataset.session};e.dataTransfer.setData('text/plain',JSON.stringify(drag));e.dataTransfer.effectAllowed='move'});el.addEventListener('dragend',()=>drag=null);el.addEventListener('click',e=>{e.stopPropagation();openSession({sessionId:el.dataset.session})})});
+    bindSessionHover();
+    document.querySelectorAll('.live [data-session]').forEach(el=>el.addEventListener('click',()=>openRequest({sessionId:el.dataset.session})));
+    document.querySelectorAll('[data-public-date]').forEach(cell=>{cell.querySelector('.slot-request')?.addEventListener('click',e=>{e.stopPropagation();openRequest({date:cell.dataset.publicDate,time:cell.dataset.publicTime})})});
+  }
+  function parseDrag(e){try{return JSON.parse(e.dataTransfer.getData('text/plain'))}catch{return drag}}
+  async function moveSession(id,date,time,coachId){const current=clone(state);const s=state.sessions.find(x=>x.id===id);if(!s)return;if(!isAvailable(coachId,date,time)){toast('That coach is not available at this time.');return}s.date=date;s.time=time;s.coachId=coachId;try{await commitState('Moved session.')}catch(e){state=current;render();toast(e.message,'error')}}
+  function openModal(html,variant=''){modal.className=`modal ${variant}`.trim();modal.innerHTML=html;backdrop.classList.add('open')}function closeModal(){backdrop.classList.remove('open');modal.className='modal';modal.innerHTML=''}backdrop.addEventListener('click',e=>{if(e.target===backdrop)closeModal()});window.closeModal=closeModal;
+  function sessionDraft(existing,seed){return existing?clone(existing):{id:'',date:seed.date,time:seed.time,coachId:seed.coachId,classTypeId:seed.classTypeId||state.classTypes[0]?.id,kind:'Group',capacity:10,durationMinutes:60,status:'active',notes:'',repeatWeeks:0,repeatDays:[],createdAt:new Date().toISOString()}}
+  function openSession(opts={}){
+    const existing=opts.sessionId?state.sessions.find(s=>s.id===opts.sessionId):null;let d=opts.editorState?.draft?clone(opts.editorState.draft):sessionDraft(existing,opts);let kind=opts.editorState?.kind||d.kind||'Group';let repeatDays=new Set(opts.editorState?.repeatDays||d.repeatDays||[]), repeatWeeks=opts.editorState?.repeatWeeks??(+d.repeatWeeks||0);
+    const cap=k=>k==='1-on-1'?1:k==='Semi-Private'?4:10;
+    const draw=()=>{const booked=existing?clientsForSession(existing.id):[];openModal(`<div class="modal-head"><div><h2>${existing?'Edit Session':'Create Session'}</h2><p>${prettyDate(d.date)} · ${prettyTime(d.time)} · ${esc(coach(d.coachId)?.name||'Coach')}</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="modal-grid"><section class="card"><div class="field"><label>Session Format</label><div class="kind-grid">${['Group','Semi-Private','1-on-1'].map(k=>`<button class="kind-btn ${kind===k?'active':''}" data-kind="${k}">${k}<br><small>up to ${cap(k)}</small></button>`).join('')}</div></div><div class="form-two"><div class="field"><label>Class Type</label><select id="sType">${state.classTypes.map(t=>`<option value="${esc(t.id)}" ${d.classTypeId===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div><div class="field"><label>Coach</label><select id="sCoach">${activeCoaches().map(c=>`<option value="${esc(c.id)}" ${d.coachId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div></div><div class="form-three"><div class="field"><label>Date</label><input id="sDate" type="date" value="${d.date}"></div><div class="field"><label>Time</label><input id="sTime" type="time" value="${d.time}"></div><div class="field"><label>Capacity</label><input id="sCap" type="number" min="1" max="${cap(kind)}" value="${Math.min(d.capacity||cap(kind),cap(kind))}"></div></div><div class="form-two"><div class="field"><label>Duration</label><div class="stepper"><button id="durMinus">−</button><strong id="durationLabel">${d.durationMinutes||60} minutes</strong><button id="durPlus">+</button></div></div><div class="field"><label>Status</label><select id="sStatus"><option value="active" ${d.status==='active'?'selected':''}>Active</option><option value="pending" ${d.status==='pending'?'selected':''}>Pending</option><option value="canceled" ${d.status==='canceled'?'selected':''}>Canceled</option></select></div></div><div class="field"><label>Notes</label><textarea id="sNotes" rows="3" placeholder="Coach notes, setup, or public details">${esc(d.notes||'')}</textarea></div></section><section class="card"><div class="field"><label>Repeat Session</label><div class="repeat-days"><button class="repeat-btn none ${repeatWeeks===0?'active':''}" id="noRepeat">No Repeat</button><div class="stepper"><button id="weekMinus">−</button><strong id="weekLabel">${repeatWeeks||0} weeks</strong><button id="weekPlus">+</button></div><span></span></div></div><div class="field"><label>Repeat Days (enabled when repeat is set)</label><div class="repeat-days">${DAYS.map(day=>`<button class="repeat-btn ${repeatDays.has(day)?'active':''}" data-rday="${day}" ${repeatWeeks===0?'disabled':''}>${day==='Thu'?'Th':day[0]}</button>`).join('')}</div><span class="hint">Start blank. Select days after setting repeat weeks.</span></div><div class="divider"></div><div class="booked-heading"><div class="section-title"><h2>Booked Clients</h2><span>${booked.length}/${d.capacity||cap(kind)} booked</span></div>${existing?'<button class="btn primary compact" id="openClientPicker">+ Add Client</button>':'<span class="hint">Save the session to add clients.</span>'}</div><div class="booked-list">${booked.length?booked.map(c=>{const booking=bookingFor(existing.id,c.id);const attendance=booking?.attendance||'unmarked';return `<div class="booked-row"><div><b>${esc(c.name||'Client')}</b><small>${esc(c.email||'No email')} · ${esc(c.package||'Unassigned')}</small></div><div class="booked-actions">${attendanceButton(attendance,c.id)}<button class="x-btn" data-remove-client="${esc(c.id)}" title="Remove from session">×</button></div></div>`}).join(''):'<div class="empty">No clients booked yet. Use Add Client to select from your Client Portal.</div>'}</div></section></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button>${existing?'<button class="btn danger" id="deleteSession">Delete</button><button class="btn warn" id="duplicateSession">Duplicate</button>':''}<button class="btn primary" id="saveSession">${existing?'Save Changes':'Create Session'}</button></div>`);
+      modal.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{capture();kind=b.dataset.kind;d.capacity=cap(kind);draw()});modal.querySelectorAll('[data-rday]').forEach(b=>b.onclick=()=>{capture();repeatDays.has(b.dataset.rday)?repeatDays.delete(b.dataset.rday):repeatDays.add(b.dataset.rday);draw()});
+      document.getElementById('noRepeat').onclick=()=>{capture();repeatWeeks=0;repeatDays.clear();draw()};document.getElementById('weekMinus').onclick=()=>{capture();repeatWeeks=Math.max(0,repeatWeeks-1);draw()};document.getElementById('weekPlus').onclick=()=>{capture();repeatWeeks=Math.min(52,repeatWeeks+1);draw()};document.getElementById('durMinus').onclick=()=>{capture();d.durationMinutes=Math.max(30,(d.durationMinutes||60)-15);draw()};document.getElementById('durPlus').onclick=()=>{capture();d.durationMinutes=Math.min(240,(d.durationMinutes||60)+15);draw()};
+      document.getElementById('saveSession').onclick=saveDraft;document.getElementById('deleteSession')?.addEventListener('click',async()=>{if(!confirm('Delete this session?'))return;await commit(mut=>{mut.sessions=mut.sessions.filter(s=>s.id!==existing.id);mut.bookings=mut.bookings.filter(b=>b.sessionId!==existing.id)},'Session deleted.');closeModal()});document.getElementById('duplicateSession')?.addEventListener('click',async()=>{capture();const n={...d,id:uid(),time:d.time,createdAt:new Date().toISOString(),repeatWeeks:0,repeatDays:[]};await commit(mut=>{mut.sessions.push(n)},'Session duplicated.');closeModal()});document.getElementById('openClientPicker')?.addEventListener('click',()=>{capture();openClientPicker(existing.id,{draft:clone(d),kind,repeatDays:[...repeatDays],repeatWeeks})});modal.querySelectorAll('[data-remove-client]').forEach(b=>b.onclick=async()=>{const clientId=b.dataset.removeClient;await commit(mut=>{mut.bookings=mut.bookings.filter(x=>!(x.sessionId===existing.id&&x.clientId===clientId))},'Client removed from session.');draw()});modal.querySelectorAll('[data-cycle-attendance-client]').forEach(btn=>btn.onclick=async()=>{const clientId=btn.dataset.cycleAttendanceClient;const current=bookingFor(existing.id,clientId)?.attendance||'unmarked';const value=nextAttendance(current);await commit(mut=>{const booking=mut.bookings.find(x=>x.sessionId===existing.id&&x.clientId===clientId);if(booking){booking.attendance=value;booking.attendanceMarkedAt=value==='unmarked'?'':new Date().toISOString()}},`Attendance marked: ${attendanceLabel(value)}.`);draw()});
+    };
+    function capture(){const g=id=>document.getElementById(id);if(!g('sType'))return;d={...d,classTypeId:g('sType').value,coachId:g('sCoach').value,date:g('sDate').value,time:g('sTime').value,capacity:+g('sCap').value,status:g('sStatus').value,notes:g('sNotes').value,durationMinutes:d.durationMinutes||60}}
+    async function saveDraft(){
+      capture();
+      d.kind=kind;
+      d.capacity=Math.min(Math.max(1,d.capacity||cap(kind)),cap(kind));
+      d.repeatWeeks=repeatWeeks;
+      d.repeatDays=[...repeatDays];
+      if(!isAvailable(d.coachId,d.date,d.time)&&!confirm('This time is not marked available for the selected coach. Save anyway?')) return;
+      await commit(mut=>{
+        if(existing){
+          const target=mut.sessions.find(s=>s.id===existing.id);
+          if(target) Object.assign(target,d);
+        } else {
+          d.id=uid();
+          mut.sessions.push(clone(d));
+        }
+        if(repeatWeeks>0 && repeatDays.size){
+          for(let wk=0; wk<repeatWeeks; wk++){
+            for(const weekday of repeatDays){
+              const base=new Date(d.date+'T12:00:00');
+              const targetIndex=DAYS.indexOf(weekday);
+              const baseIndex=DAYS.indexOf(dayName(d.date));
+              const delta=(targetIndex-baseIndex)+(wk*7);
+              if(delta<=0) continue;
+              const repeatDate=iso(addDays(base,delta));
+              const exists=mut.sessions.some(s=>s.date===repeatDate&&s.time===d.time&&s.coachId===d.coachId&&s.classTypeId===d.classTypeId);
+              if(!exists){
+                mut.sessions.push({...clone(d),id:uid(),date:repeatDate,repeatWeeks:0,repeatDays:[],createdAt:new Date().toISOString()});
+              }
+            }
+          }
+        }
+      }, existing?'Session saved.':'Session created.');
+      closeModal();
+    }
+    draw();
+  }
+  function clientInitials(name='Client'){const parts=String(name).trim().split(/\s+/).filter(Boolean);return (parts.slice(0,2).map(x=>x[0]||'').join('')||'CL').toUpperCase()}
+  function openClientPicker(sessionId,editorState={}){
+    let q='',packageFilter='All Clients';
+    const selectedIds=new Set();
+    const addOne=async clientId=>{
+      const session=state.sessions.find(s=>s.id===sessionId);
+      if(!session){toast('This session is no longer available.','error');closeModal();return}
+      if((state.bookings||[]).some(b=>b.sessionId===sessionId&&b.clientId===clientId&&['approved','confirmed'].includes(b.status||'approved'))){toast('That client is already booked.');return}
+      try{
+        let didAdd=false;
+        await commit(mut=>{
+          const target=mut.sessions.find(s=>s.id===sessionId);
+          if(!target)return;
+          const active=(mut.bookings||[]).filter(b=>b.sessionId===sessionId&&['approved','confirmed'].includes(b.status||'approved'));
+          if(active.length>=Math.max(1,+target.capacity||1))return;
+          if(active.some(b=>b.clientId===clientId))return;
+          mut.bookings.push({id:uid(),sessionId,clientId,status:'approved',attendance:'unmarked',createdAt:new Date().toISOString()});
+          didAdd=true;
+        },'Client added to session.');
+        if(!didAdd){toast('This session is at capacity.','error');return}
+        selectedIds.delete(clientId);
+        draw();
+      }catch(error){toast(error.message||'Could not add that client.','error')}
+    };
+    const saveSelected=async()=>{
+      const wanted=[...selectedIds];
+      if(!wanted.length){toast('Select one or more client cards first.');return}
+      let addedIds=[];
+      try{
+        await commit(mut=>{
+          const target=mut.sessions.find(s=>s.id===sessionId);
+          if(!target)return;
+          const active=(mut.bookings||[]).filter(b=>b.sessionId===sessionId&&['approved','confirmed'].includes(b.status||'approved'));
+          const existingIds=new Set(active.map(b=>b.clientId));
+          const room=Math.max(0,(+target.capacity||1)-active.length);
+          wanted.filter(id=>!existingIds.has(id)).slice(0,room).forEach(clientId=>{
+            mut.bookings.push({id:uid(),sessionId,clientId,status:'approved',attendance:'unmarked',createdAt:new Date().toISOString()});
+            addedIds.push(clientId);
+          });
+        },'Selected clients added to session.');
+      }catch(error){toast(error.message||'Could not add selected clients.','error');return}
+      if(!addedIds.length){toast('This session changed before the clients could be added.','error');draw();return}
+      toast(`${addedIds.length} client${addedIds.length===1?'':'s'} added to this session.`);
+      openSession({sessionId,editorState});
+    };
+    const draw=()=>{
+      const session=state.sessions.find(s=>s.id===sessionId);
+      if(!session){toast('This session is no longer available.','error');closeModal();return}
+      const sessionType=type(session.classTypeId);
+      const booked=clientsForSession(sessionId);
+      const bookedIds=new Set(booked.map(c=>c.id));
+      const capacity=Math.max(1,+session.capacity||1);
+      const openSpots=Math.max(0,capacity-booked.length);
+      [...selectedIds].forEach(id=>{if(bookedIds.has(id))selectedIds.delete(id)});
+      if(selectedIds.size>openSpots){[...selectedIds].slice(openSpots).forEach(id=>selectedIds.delete(id));}
+      const remaining=Math.max(0,openSpots-selectedIds.size);
+      const allPackages=[...new Set((state.clients||[]).map(c=>(c.package||'Unassigned').trim()||'Unassigned'))].sort((a,b)=>a.localeCompare(b));
+      const filtered=(state.clients||[]).filter(c=>{
+        const hay=[c.name,c.email,c.phone,c.package,c.chargeDate].join(' ').toLowerCase();
+        return (!q||hay.includes(q.toLowerCase()))&&(packageFilter==='All Clients'||(c.package||'Unassigned')===packageFilter);
+      }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+      openModal(`<div class="modal-head"><div><div class="eyebrow">Client Portal</div><h2>Add Clients</h2><p>Click a client card to select it in green. Use <b>Add Client</b> for an instant booking, or select multiple cards and press <b>Save Now</b>.</p></div><button class="btn ghost" id="pickerClose">Close</button></div><section class="client-picker-hero"><div class="client-picker-session"><div class="mini-mark">${brandInsignia('client-picker-insignia')}</div><div><b>${esc(sessionType.name||'Session')}</b><small>${esc(session.kind||'Group')} · ${prettyDate(session.date)} · ${prettyTime(session.time)} · ${esc(coach(session.coachId)?.name||'Coach')}</small></div></div><div class="client-picker-capacity"><div><b>${booked.length}/${capacity}</b><small>Booked</small></div><div><b>${selectedIds.size}</b><small>Selected</small></div><div><b>${remaining}</b><small>Remaining</small></div></div></section><div class="client-picker-controls"><input class="search" id="pickerSearch" placeholder="Search name, package, email, or phone" value="${esc(q)}"><div class="client-filter-strip">${['All Clients',...allPackages].map(name=>`<button class="filter-btn ${packageFilter===name?'active':''}" data-package-filter="${esc(name)}">${esc(name)}</button>`).join('')}</div></div><section class="client-picker-grid">${filtered.length?filtered.map(c=>{const already=bookedIds.has(c.id);const selected=selectedIds.has(c.id);const capacityReached=remaining===0&&!selected;const unavailable=already||capacityReached;return `<article class="client-picker-card ${already?'is-booked':''} ${selected?'is-selected':''} ${capacityReached&&!already?'is-full':''}" ${already?'':'data-select-card="'+esc(c.id)+'" tabindex="0" role="button" aria-pressed="'+(selected?'true':'false')+'"'}><div class="client-card-top"><div class="client-avatar">${esc(clientInitials(c.name))}</div><div class="client-card-name"><h3>${esc(c.name||'Client')}</h3><p>${esc(c.package||'Unassigned')}</p></div></div><div class="client-card-contact"><span>${esc(c.email||'No email on record')}</span><span>${esc(c.phone||'No phone on record')}</span></div><div class="client-card-footer"><small>${c.chargeDate?`Charge ${esc(c.chargeDate)}`:'No charge date'}</small><button class="client-add-btn ${already?'added':''} ${selected?'selected':''} ${capacityReached&&!already?'full':''}" data-add-client="${esc(c.id)}" ${unavailable?'disabled':''}>${already?'Added':capacityReached?'Capacity reached':'Add Client'}</button></div></article>`}).join(''):`<div class="client-picker-empty"><b>No clients found</b>Adjust the search or add a client in the Client Management portal first.</div>`}</section><div class="modal-actions"><button class="btn" id="pickerBack">Back to Session</button><button class="btn ghost" id="pickerManage">Client Management</button><button class="btn primary" id="saveSelectedClients" ${selectedIds.size?'':'disabled'}>${selectedIds.size?`Save Now · Add ${selectedIds.size}`:'Save Now'}</button></div>`, 'client-picker-modal');
+      document.getElementById('pickerClose').onclick=()=>openSession({sessionId,editorState});
+      document.getElementById('pickerBack').onclick=()=>openSession({sessionId,editorState});
+      document.getElementById('pickerManage').onclick=()=>openClients();
+      document.getElementById('pickerSearch').oninput=e=>{q=e.target.value;draw()};
+      modal.querySelectorAll('[data-package-filter]').forEach(btn=>btn.onclick=()=>{packageFilter=btn.dataset.packageFilter;draw()});
+      const toggleSelect=clientId=>{
+        if(selectedIds.has(clientId)) selectedIds.delete(clientId);
+        else if(selectedIds.size<openSpots) selectedIds.add(clientId);
+        else {toast('This session is at capacity.','error');return}
+        draw();
+      };
+      modal.querySelectorAll('[data-select-card]').forEach(card=>{
+        card.onclick=event=>{if(event.target.closest('[data-add-client]'))return;toggleSelect(card.dataset.selectCard)};
+        card.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSelect(card.dataset.selectCard)}};
+      });
+      modal.querySelectorAll('[data-add-client]').forEach(btn=>btn.onclick=event=>{event.preventDefault();event.stopPropagation();addOne(btn.dataset.addClient)});
+      document.getElementById('saveSelectedClients').onclick=saveSelected;
+    };
+    draw();
+  }
+  async function openRequest(seed={}){
+    const existing=seed.sessionId?(state.sessions||[]).find(s=>s.id===seed.sessionId):null;let kind=existing?.kind||'Group';const date=existing?.date||seed.date,time=existing?.time||seed.time, coachId=existing?.coachId||activeCoaches().find(c=>isAvailable(c.id,date,time))?.id||activeCoaches()[0]?.id;
+    openModal(`<div class="modal-head"><div><h2>Request Booking</h2><p>${prettyDate(date)} · ${prettyTime(time)} · ${esc(coach(coachId)?.name||'Coach')} · Approval required</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="modal-grid"><section class="card"><div class="field"><label>Your name</label><input id="rqName" placeholder="Full name"></div><div class="field"><label>Email</label><input id="rqEmail" type="email" placeholder="you@email.com"></div><div class="field"><label>Phone (optional)</label><input id="rqPhone" placeholder="Phone"></div></section><section class="card"><div class="field"><label>Requested format</label><div class="kind-grid">${['Group','Semi-Private','1-on-1'].map(k=>`<button class="kind-btn ${kind===k?'active':''}" data-rq-kind="${k}">${k}</button>`).join('')}</div></div><div class="field"><label>Note (optional)</label><textarea id="rqNotes" rows="4" placeholder="Anything the coach should know?"></textarea></div><p class="hint">This submits a request only. A coach reviews it before your booking is confirmed.</p></section></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" id="submitRequest">Submit Request</button></div>`);
+    modal.querySelectorAll('[data-rq-kind]').forEach(b=>b.onclick=()=>{kind=b.dataset.rqKind;modal.querySelectorAll('[data-rq-kind]').forEach(x=>x.classList.toggle('active',x===b))});
+    document.getElementById('submitRequest').onclick=async()=>{const name=document.getElementById('rqName').value.trim(),email=document.getElementById('rqEmail').value.trim(),phone=document.getElementById('rqPhone').value.trim(),notes=document.getElementById('rqNotes').value.trim();if(!name||!email){toast('Name and email are required.');return}try{await api('',{method:'POST',body:JSON.stringify({action:'request',request:{name,email,phone,notes,sessionId:existing?.id||'',date,time,coachId,kind}})});closeModal();toast('Request submitted. A coach will review it.')}catch(e){toast(e.message,'error')}};
+  }
+  async function openRequests(){
+    const requests=(state.requests||[]).filter(r=>r.status==='requested');openModal(`<div class="modal-head"><div><h2>Booking Requests</h2><p>Server-synced requests from the client live feed.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="request-list">${requests.length?requests.map(r=>`<article class="request-row"><div><b>${esc(r.client?.name||r.name||'Client')}</b><p>${esc(r.client?.email||r.email||'No email')} ${r.client?.phone||r.phone?`· ${esc(r.client?.phone||r.phone)}`:''}<br>${prettyDate(r.date)} · ${prettyTime(r.time)} · ${esc(coach(r.coachId)?.name||'Coach')} · ${esc(r.kind||'Group')}<br>${r.notes?esc(r.notes):'No note'} · ${fmtDateTime(r.createdAt)}</p></div><div class="request-actions"><button class="btn success" data-approve-request="${esc(r.id)}">Approve</button><button class="x-btn" data-decline-request="${esc(r.id)}" title="Decline">×</button></div></article>`).join(''):'<div class="empty">No pending requests.</div>'}</div>`);
+    modal.querySelectorAll('[data-approve-request]').forEach(b=>b.onclick=()=>approveRequest(b.dataset.approveRequest));modal.querySelectorAll('[data-decline-request]').forEach(b=>b.onclick=async()=>{await commit(mut=>{const r=mut.requests.find(x=>x.id===b.dataset.declineRequest);if(r)r.status='declined'},'Request declined.');openRequests()});
+  }
+  async function approveRequest(id){await commit(mut=>{const r=mut.requests.find(x=>x.id===id);if(!r)return;let client=mut.clients.find(c=>(c.email||'').toLowerCase()===(r.client?.email||r.email||'').toLowerCase());if(!client){client={id:uid(),name:r.client?.name||r.name||'Client',email:r.client?.email||r.email||'',phone:r.client?.phone||r.phone||'',package:'Unassigned',chargeDate:''};mut.clients.push(client)}let session=mut.sessions.find(s=>s.id===r.sessionId);if(!session){session={id:uid(),classTypeId:mut.classTypes[0]?.id,kind:r.kind||'Group',date:r.date,time:r.time,coachId:r.coachId,capacity:r.kind==='1-on-1'?1:r.kind==='Semi-Private'?4:10,durationMinutes:60,status:'active',notes:'Created from booking request',repeatWeeks:0,repeatDays:[],createdAt:new Date().toISOString()};mut.sessions.push(session)}if(!mut.bookings.some(b=>b.sessionId===session.id&&b.clientId===client.id)){mut.bookings.push({id:uid(),sessionId:session.id,clientId:client.id,status:'approved',createdAt:new Date().toISOString()})}r.status='approved';r.reviewedAt=new Date().toISOString()},'Request approved and client booked.');openRequests()}
+  function openType(id){const existing=id?state.classTypes.find(t=>t.id===id):null;const d=existing?clone(existing):{id:'',name:'',intensity:'Training',desc:'',duration:60,color:'#1F8CFF',visible:true,active:true};openModal(`<div class="modal-head"><div><h2>${existing?'Edit Class Type':'New Class Type'}</h2><p>Class types appear in the coach grid and public schedule.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="modal-grid"><section class="card"><div class="field"><label>Name</label><input id="tName" value="${esc(d.name)}" placeholder="Class name"></div><div class="field"><label>Intensity / label</label><input id="tIntensity" value="${esc(d.intensity)}" placeholder="Strength, Conditioning, etc."></div><div class="field"><label>Default duration</label><input id="tDuration" type="number" min="30" max="240" step="15" value="${d.duration||60}"></div></section><section class="card"><div class="field"><label>Accent color</label><input id="tColor" type="color" value="${esc(d.color||'#1F8CFF')}"></div><div class="field"><label>Description</label><textarea id="tDesc" rows="3">${esc(d.desc||'')}</textarea></div><label class="pill" style="justify-content:flex-start"><input id="tVisible" type="checkbox" ${d.visible!==false?'checked':''}> Visible on public live schedule</label></section></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button>${existing?'<button class="btn danger" id="deleteType">Delete</button>':''}<button class="btn primary" id="saveType">Save Type</button></div>`);document.getElementById('saveType').onclick=async()=>{const next={...d,id:d.id||uid(),name:document.getElementById('tName').value.trim(),intensity:document.getElementById('tIntensity').value.trim(),duration:+document.getElementById('tDuration').value||60,color:document.getElementById('tColor').value,desc:document.getElementById('tDesc').value.trim(),visible:document.getElementById('tVisible').checked,active:true};if(!next.name){toast('Class type name is required.');return}await commit(mut=>{if(existing)Object.assign(mut.classTypes.find(t=>t.id===existing.id),next);else mut.classTypes.push(next)},'Class type saved.');closeModal()};document.getElementById('deleteType')?.addEventListener('click',async()=>{if(!confirm('Delete this class type? Existing sessions will keep their title until reassigned.'))return;await commit(mut=>{mut.classTypes=mut.classTypes.filter(t=>t.id!==existing.id)},'Class type deleted.');closeModal()})}
+  function openAvailability(){
+    let coachId=activeCoachId;
+    let selectedWeekStart=weekStart;
+    let draftAvailability=null;
+    const buildWeekDraft=(id,base)=>{
+      const shaped={};
+      DAYS.forEach((day,i)=>{
+        const date=dateFor(base,i);
+        shaped[day]={};
+        TIMES.forEach(tm=>{shaped[day][tm]=isAvailable(id,date,tm)});
+      });
+      return shaped;
+    };
+    const weekRangeFor=base=>`${monthDay(dateFor(base,0))} — ${monthDay(dateFor(base,4))}`;
+    const clearWeekOverrides=(mut,id,base)=>{
+      if(!mut.availabilityOverrides?.[id])return;
+      DAYS.forEach((_,i)=>delete mut.availabilityOverrides[id][dateFor(base,i)]);
+    };
+    const draw=()=>{
+      const c=coach(coachId);
+      draftAvailability=buildWeekDraft(coachId,selectedWeekStart);
+      const weekRange=weekRangeFor(selectedWeekStart);
+      openModal(`<div class="modal-head"><div><h2>Coach Availability</h2><p>Select a week, click the hour tiles on/off, then choose whether this becomes the recurring schedule or only a temporary override for that week.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="availability-toolbar"><div class="availability-control"><label>Coach / Manager</label><select id="avCoach">${activeCoaches().map(x=>`<option value="${esc(x.id)}" ${x.id===coachId?'selected':''}>${esc(x.name)} · ${esc(x.role)}</option>`).join('')}</select><small>${esc(c?.role||'Coach')} schedule controls</small></div><div class="availability-control"><label>Specific week</label><input id="availabilityWeekDate" type="date" value="${dateFor(selectedWeekStart,0)}"><small>${esc(weekRange)}</small></div></div><div class="availability-mode-card"><h3>Save structure</h3><p><b>Save recurring schedule</b> updates the normal weekly template. <b>Save this week only</b> saves date-specific overrides, so being off this Friday does not affect next Friday.</p><div class="tag-row"><span class="availability-tag">Recurring weekly template</span><span class="availability-tag">Specific week override</span><span class="availability-tag">Server-saved instantly</span></div><div class="availability-legend"><span class="on"><i></i>Available</span><span><i></i>Off / unavailable</span></div></div><div class="calendar-shell"><section class="week-calendar availability-grid"><div class="cal-head">Time</div>${DAYS.map((d,i)=>`<div class="cal-head">${d}<br><small>${monthDay(dateFor(selectedWeekStart,i))}</small></div>`).join('')}${TIMES.map(tm=>`<div class="time-cell">${prettyTime(tm)}</div>${DAYS.map(day=>`<button class="day-cell ${draftAvailability?.[day]?.[tm]?'available':''}" data-av-day="${day}" data-av-time="${tm}" aria-label="${day} ${prettyTime(tm)} availability"></button>`).join('')}`).join('')}</section></div><div class="modal-actions"><button class="btn" onclick="closeModal()">Close</button><button class="btn week-only" id="saveWeekAvailability">Save this week only</button><button class="btn primary" id="saveAvailability">Save recurring schedule</button></div>`);
+      document.getElementById('avCoach').onchange=e=>{coachId=e.target.value;draw()};
+      document.getElementById('availabilityWeekDate').onchange=e=>{selectedWeekStart=monday(new Date(e.target.value+'T12:00:00'));draw()};
+      modal.querySelectorAll('[data-av-day]').forEach(b=>b.onclick=()=>{const d=b.dataset.avDay,t=b.dataset.avTime;draftAvailability[d]??={};draftAvailability[d][t]=!draftAvailability[d][t];b.classList.toggle('available',draftAvailability[d][t])});
+      document.getElementById('saveAvailability').onclick=async()=>{await commit(mut=>{mut.availability=clone(mut.availability||{});mut.availability[coachId]=clone(draftAvailability||{});mut.availabilityOverrides=clone(mut.availabilityOverrides||{});clearWeekOverrides(mut,coachId,selectedWeekStart)},'Recurring availability saved.');closeModal()};
+      document.getElementById('saveWeekAvailability').onclick=async()=>{await commit(mut=>{mut.availabilityOverrides=clone(mut.availabilityOverrides||{});mut.availabilityOverrides[coachId]??={};DAYS.forEach((day,i)=>{const date=dateFor(selectedWeekStart,i);mut.availabilityOverrides[coachId][date]??={};TIMES.forEach(tm=>{mut.availabilityOverrides[coachId][date][tm]=!!draftAvailability?.[day]?.[tm]})})},`Availability saved for ${weekRange} only.`);closeModal()};
+    };
+    draw();
+  }
+  function openPermissions(){
+    if(!isAdmin()){toast('Admin access is required to edit permissions.','error');return}
+    const draftCoaches=clone(state.coaches||[]).map(c=>({permissions:staffPermissions(c),...c,accessPinPlain:''}));
+    const draftAvailability=clone(state.availability||{});
+    const permissions=[
+      ['isAdmin','Admin / full control','Can edit permissions and all employee records'],
+      ['manageSchedule','Edit schedules','Can create, move, duplicate, and delete sessions'],
+      ['manageAvailability','Edit availability','Can save recurring and week-only availability'],
+      ['manageClients','Manage clients','Can add/edit clients and assign them to sessions'],
+      ['viewAllReports','View all reports','Can see other employee dashboards and payroll data'],
+      ['exportReports','Export reports','Can export Excel/PDF report files'],
+      ['manageCompensation','Edit compensation','Can edit hourly pay, attendance commission, and member bonuses'],
+      ['approveRequests','Approve requests','Can approve/decline client booking requests']
+    ];
+    const roleClass=c=>c.role==='Admin / Coach'?'admin':c.role==='Manager'?'manager':'';
+    const draw=()=>{
+      openModal(`<div class="modal-head"><div><div class="eyebrow">Admin only</div><h2>Permissions & Staff Access</h2><p>Central hub for employee PINs, roster access, compensation, report visibility, and operational permissions. These settings also power the Reports dashboard tiles.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="permission-grid">${draftCoaches.map(c=>`<article class="permission-card ${roleClass(c)}" data-permission-card="${esc(c.id)}"><div class="permission-head"><div class="permission-ident"><div class="permission-avatar">${esc(staffInitials(c))}</div><div><b>${esc(c.name)}</b><span>${esc(c.role)} ${c.active===false?'· inactive':'· active'}</span></div></div>${c.id==='jordan'?'<span class="pill"><span class="dot"></span>Primary admin</span>':`<button class="x-btn" data-coach-delete="${esc(c.id)}">×</button>`}</div><div class="permission-fields"><div class="field"><label>Name</label><input data-coach-name value="${esc(c.name)}"></div><div class="field"><label>Role</label><select data-coach-role><option ${c.role==='Admin / Coach'?'selected':''}>Admin / Coach</option><option ${c.role==='Coach'?'selected':''}>Coach</option><option ${c.role==='Manager'?'selected':''}>Manager</option></select></div><div class="field"><label>Active</label><select data-coach-active><option value="true" ${c.active!==false?'selected':''}>Active</option><option value="false" ${c.active===false?'selected':''}>Inactive</option></select></div></div><div class="permission-pin"><input data-coach-pin type="password" placeholder="Set or replace access PIN"><button class="btn" data-clear-pin="${esc(c.id)}">Clear PIN</button></div><div class="permission-toggle-grid">${permissions.map(([key,label,tip])=>`<label class="perm-toggle" title="${esc(tip)}"><span><strong>${esc(label)}</strong><br><small>${esc(tip)}</small></span><input data-permission="${esc(key)}" type="checkbox" ${staffPermissions(c)[key]?'checked':''} ${c.id==='jordan'&&key==='isAdmin'?'disabled':''}></label>`).join('')}</div><div class="permission-note">Compensation fields are edited from the Reports dashboard. Employee-specific PINs can be used instead of the master admin PIN.</div></article>`).join('')}</div><div class="modal-actions"><button class="btn" id="addCoachFromPermissions">+ Employee</button><button class="btn ghost" onclick="closeModal()">Close</button><button class="btn primary" id="savePermissions">Save Permissions</button></div>`,'report-modal');
+      document.getElementById('addCoachFromPermissions').onclick=()=>{const next={id:uid(),name:'New Employee',role:'Coach',active:true,payRate:0,sessionCommissionRate:0,signupBonusRate:15,permissions:roleDefaults('Coach'),accessPinPlain:''};draftCoaches.push(next);draftAvailability[next.id]=draftAvailability[next.id]||{Mon:{},Tue:{},Wed:{},Thu:{},Fri:{}};draw()};
+      modal.querySelectorAll('[data-coach-delete]').forEach(b=>b.onclick=()=>{const index=draftCoaches.findIndex(c=>c.id===b.dataset.coachDelete);if(index>=0){const [removed]=draftCoaches.splice(index,1);delete draftAvailability[removed.id];draw()}});
+      modal.querySelectorAll('[data-clear-pin]').forEach(b=>b.onclick=()=>{const c=draftCoaches.find(x=>x.id===b.dataset.clearPin);if(c){c.accessPinHash='';c.accessPinPlain='';toast(`PIN cleared for ${c.name}.`)}});
+      document.getElementById('savePermissions').onclick=async()=>{
+        modal.querySelectorAll('[data-permission-card]').forEach(card=>{const c=draftCoaches.find(x=>x.id===card.dataset.permissionCard);if(!c)return;c.name=card.querySelector('[data-coach-name]').value.trim()||c.name;c.role=card.querySelector('[data-coach-role]').value;c.active=card.querySelector('[data-coach-active]').value==='true';const nextPerm={...roleDefaults(c.role)};card.querySelectorAll('[data-permission]').forEach(chk=>{nextPerm[chk.dataset.permission]=chk.checked});if(c.id==='jordan')nextPerm.isAdmin=true;c.permissions=nextPerm;const newPin=card.querySelector('[data-coach-pin]').value.trim();if(newPin)c.accessPinPlain=newPin;});
+        await commit(mut=>{mut.coaches=clone(draftCoaches);mut.availability=clone(draftAvailability)},'Permissions and staff access saved.');
+        currentUser={...activeUser(),permissions:staffPermissions((state.coaches||[]).find(c=>c.id===userStaffId())||{})};sessionStorage.setItem('axon_scheduler_user',JSON.stringify(currentUser));
+        closeModal();
+      };
+    };
+    draw();
+  }
+  function openCoaches(){openPermissions()}
+  function clientRows(clientId){
+    return (state.bookings||[]).filter(b=>b.clientId===clientId&&['approved','confirmed'].includes(b.status||'approved')).map(b=>({booking:b,session:(state.sessions||[]).find(s=>s.id===b.sessionId)})).filter(x=>x.session).sort((a,b)=>`${b.session.date}|${b.session.time}`.localeCompare(`${a.session.date}|${a.session.time}`));
+  }
+  function clientDashboardCode(client){return `AX-${String(client.id||'CLIENT').replace(/[^a-z0-9]/gi,'').slice(-6).toUpperCase()||'CLIENT'}`}
+  function clientAttendanceChip(status){const visual=attendanceVisual(status);return `<span class="client-status ${esc(visual)}">${esc(attendanceLabel(visual))}</span>`}
+  function clientDirectoryCard(c){
+    const rows=clientRows(c.id), latest=rows[0]?.session;
+    return `<button class="client-directory-card" data-open-client="${esc(c.id)}"><div class="client-directory-top"><div class="client-avatar">${esc(clientInitials(c.name))}</div><div><h3>${esc(c.name||'Client')}</h3><p>${esc(c.package||'Unassigned')}</p></div></div><div class="client-directory-contact"><span>${esc(c.email||'No email on record')}</span><span>${esc(c.phone||'No phone on record')}</span></div><div class="client-directory-footer"><small>${latest?`${type(latest.classTypeId).name} · ${prettyDate(latest.date)}`:(c.chargeDate?`Charge ${esc(c.chargeDate)}`:'No activity yet')}</small><span class="open-chip">Open profile</span></div></button>`;
+  }
+  function parseClientImport(txt,draftClients){
+    const lines=txt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!lines.length)return{added:0,updated:0};
+    const delim=lines[0].includes('\t')?'\t':lines[0].includes('|')?'|':',';const rows=lines.map(x=>x.split(delim).map(y=>y.trim()));const header=rows[0].map(x=>x.toLowerCase());const has=header.some(x=>/name|email|phone/.test(x));const startRow=has?1:0;const idx=n=>has?Math.max(0,header.findIndex(x=>x.includes(n))):n==='name'?0:n==='email'?1:n==='phone'?2:n==='package'?3:4;let added=0,updated=0;
+    for(let i=startRow;i<rows.length;i++){const r=rows[i];const entry={name:r[idx('name')]||'',email:r[idx('email')]||'',phone:r[idx('phone')]||'',package:r[idx('package')]||'Unassigned',chargeDate:r[idx('charge')]||'',notes:''};if(!entry.name&&!entry.email)continue;const match=draftClients.find(x=>entry.email&&String(x.email||'').toLowerCase()===entry.email.toLowerCase());if(match){Object.assign(match,{...match,...entry});updated++}else{draftClients.push({id:uid(),...entry});added++}}
+    return{added,updated};
+  }
+  function openClientEditor(clientId=''){
+    const existing=clientId?(state.clients||[]).find(c=>c.id===clientId):null;
+    const d=existing?clone(existing):{id:'',name:'',email:'',phone:'',package:'Unassigned',chargeDate:'',notes:'',signupOwnerId:activeCoachId||'jordan',signupDate:iso(new Date())};
+    const packages=[...new Set((state.clients||[]).map(c=>c.package||'Unassigned').concat([d.package||'Unassigned']))].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+    openModal(`<div class="modal-head"><div><div class="eyebrow">Client Portal</div><h2>${existing?'Edit Client':'Add Client'}</h2><p>Create a clean booking record with contact, package, billing date, member sign-up attribution, and internal coaching notes.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="modal-grid"><section class="card"><div class="field"><label>Client name</label><input id="clientName" value="${esc(d.name)}" placeholder="Full name"></div><div class="form-two"><div class="field"><label>Email</label><input id="clientEmail" type="email" value="${esc(d.email)}" placeholder="email@example.com"></div><div class="field"><label>Phone</label><input id="clientPhone" value="${esc(d.phone)}" placeholder="Phone"></div></div><div class="form-two"><div class="field"><label>Package</label><input id="clientPackage" list="clientPackageList" value="${esc(d.package||'Unassigned')}" placeholder="Package"><datalist id="clientPackageList">${packages.map(p=>`<option value="${esc(p)}">`).join('')}</datalist></div><div class="field"><label>Charge date</label><input id="clientChargeDate" type="date" value="${esc(d.chargeDate||'')}"></div></div><div class="form-two"><div class="field"><label>Signed up by</label><select id="clientSignupOwner"><option value="">Unassigned</option>${(state.coaches||[]).map(c=>`<option value="${esc(c.id)}" ${d.signupOwnerId===c.id?'selected':''}>${esc(c.name)} · ${esc(c.role)}${c.active===false?' (inactive)':''}</option>`).join('')}</select></div><div class="field"><label>Member signup date</label><input id="clientSignupDate" type="date" value="${esc(d.signupDate||'')}"></div></div></section><section class="card"><div class="field"><label>Coach notes</label><textarea id="clientNotes" rows="11" placeholder="Private coaching notes, preferences, or follow-up details.">${esc(d.notes||'')}</textarea></div><p class="hint">Member sign-up attribution powers the manager incentive dashboard. Client records are coach-only and used for bookings, attendance, payroll reporting, and client history.</p></section></div><div class="modal-actions"><button class="btn" id="cancelClientEdit">Cancel</button>${existing?'<button class="btn danger" id="deleteClientRecord">Delete Client</button>':''}<button class="btn primary" id="saveClientRecord">${existing?'Save Client':'Add Client'}</button></div>`, 'client-manager-modal');
+    document.getElementById('cancelClientEdit').onclick=openClients;
+    document.getElementById('saveClientRecord').onclick=async()=>{const next={...d,id:d.id||uid(),name:document.getElementById('clientName').value.trim(),email:document.getElementById('clientEmail').value.trim(),phone:document.getElementById('clientPhone').value.trim(),package:document.getElementById('clientPackage').value.trim()||'Unassigned',chargeDate:document.getElementById('clientChargeDate').value,signupOwnerId:document.getElementById('clientSignupOwner').value,signupDate:document.getElementById('clientSignupDate').value,notes:document.getElementById('clientNotes').value.trim()};if(!next.name){toast('Client name is required.','error');return}await commit(mut=>{if(existing)Object.assign(mut.clients.find(c=>c.id===existing.id),next);else mut.clients.push(next)},existing?'Client profile saved.':'Client added.');openClientDashboard(next.id)};
+    document.getElementById('deleteClientRecord')?.addEventListener('click',async()=>{if(!confirm('Delete this client record? Existing booking history will no longer display their details.'))return;await commit(mut=>{mut.clients=mut.clients.filter(c=>c.id!==existing.id);mut.bookings=mut.bookings.filter(b=>b.clientId!==existing.id)},'Client deleted.');openClients()});
+  }
+  function openClientBooking(clientId){
+    const client=(state.clients||[]).find(c=>c.id===clientId);if(!client)return;
+    const today=iso(new Date());const choices=(state.sessions||[]).filter(s=>s.status==='active'&&s.date>=today).sort((a,b)=>`${a.date}|${a.time}`.localeCompare(`${b.date}|${b.time}`));
+    openModal(`<div class="modal-head"><div><div class="eyebrow">Quick Booking</div><h2>Book ${esc(client.name||'Client')}</h2><p>Select an active session with room. The client will be added instantly.</p></div><button class="btn ghost" id="bookBack">Back</button></div><section class="client-book-options">${choices.length?choices.map(s=>{const booked=clientsForSession(s.id).length,capacity=Math.max(1,+s.capacity||1),full=booked>=capacity;return `<article class="client-book-option"><div><b>${esc(type(s.classTypeId).name||'Session')} · ${esc(s.kind||'Group')}</b><small>${prettyDate(s.date)} · ${prettyTime(s.time)} · ${esc(coach(s.coachId)?.name||'Coach')} · ${booked}/${capacity} booked</small></div><button class="btn ${full?'ghost':'primary'}" data-book-client-session="${esc(s.id)}" ${full?'disabled':''}>${full?'Full':'Book'}</button></article>`}).join(''):'<div class="empty">No upcoming active sessions are available.</div>'}</section>`, 'client-manager-modal');
+    document.getElementById('bookBack').onclick=()=>openClientDashboard(clientId);
+    modal.querySelectorAll('[data-book-client-session]').forEach(btn=>btn.onclick=async()=>{const sessionId=btn.dataset.bookClientSession;let added=false;await commit(mut=>{const session=mut.sessions.find(s=>s.id===sessionId);const count=(mut.bookings||[]).filter(b=>b.sessionId===sessionId&&['approved','confirmed'].includes(b.status||'approved')).length;if(session&&count<(session.capacity||1)&&!mut.bookings.some(b=>b.sessionId===sessionId&&b.clientId===clientId)){mut.bookings.push({id:uid(),sessionId,clientId,status:'approved',attendance:'unmarked',createdAt:new Date().toISOString()});added=true}},'Client booked from profile.');if(!added){toast('That session is full or already changed.','error');return}openClientDashboard(clientId)});
+  }
+  function openClientDashboard(clientId){
+    const client=(state.clients||[]).find(c=>c.id===clientId);if(!client){toast('That client record is no longer available.','error');openClients();return}
+    let activeTab='overview';
+    const draw=()=>{
+      const rows=clientRows(client.id), today=iso(new Date());const attended=rows.filter(x=>['present','late'].includes(x.booking.attendance||'unmarked')).length;const marked=rows.filter(x=>(x.booking.attendance||'unmarked')!=='unmarked').length;const upcoming=rows.filter(x=>x.session.date>=today&&x.session.status==='active').length;const attendanceRate=marked?Math.round(attended/marked*100):0;const latest=rows.slice(0,5);
+      const overview=`<section class="client-profile-grid"><section class="card"><div class="section-title"><h2>Interactions & Activity</h2><span>Coach-only timeline</span></div><p class="hint">A concise view of recent bookings, attendance markers, and training context.</p><div class="client-timeline">${latest.length?latest.map(({booking,session})=>`<div class="client-event"><div class="client-event-icon">${attendanceVisual(booking.attendance)==='present'?'✓':attendanceVisual(booking.attendance)==='rescheduled'?'↻':attendanceVisual(booking.attendance)==='cancelled'?'×':'•'}</div><div><b>${esc(type(session.classTypeId).name||'Session')} · ${esc(attendanceLabel(attendanceVisual(booking.attendance||'unmarked')))}</b><p>${prettyDate(session.date)} · ${prettyTime(session.time)} · ${esc(coach(session.coachId)?.name||'Coach')} · ${esc(session.kind||'Group')}</p></div></div>`).join(''):`<div class="empty">No booking activity yet.</div>`}</div></section><section class="card"><div class="section-title"><h2>Training Snapshot</h2><span>At a glance</span></div><div class="client-summary-metrics"><div class="client-summary-metric"><b>${rows.length}</b><small>Sessions booked</small></div><div class="client-summary-metric"><b>${attendanceRate}%</b><small>Attendance rate</small></div><div class="client-summary-metric"><b>${upcoming}</b><small>Upcoming</small></div></div><div class="client-detail-list"><div class="client-detail-row"><span>Primary coach</span><b>${esc(rows[0]?.session?coach(rows[0].session.coachId)?.name||'Unassigned':'Unassigned')}</b></div><div class="client-detail-row"><span>Package</span><b>${esc(client.package||'Unassigned')}</b></div><div class="client-detail-row"><span>Charge date</span><b>${client.chargeDate?esc(client.chargeDate):'Not set'}</b></div><div class="client-detail-row"><span>Signed up by</span><b>${esc(coach(client.signupOwnerId)?.name||'Unassigned')}</b></div><div class="client-detail-row"><span>Client code</span><b>${esc(clientDashboardCode(client))}</b></div></div></section></section>`;
+      const sessions=`<section class="card"><div class="section-title"><h2>Sessions</h2><span>${rows.length} total</span></div><div class="client-session-list">${rows.length?rows.map(({booking,session})=>`<div class="client-session-row"><div><b>${esc(type(session.classTypeId).name||'Session')} · ${esc(session.kind||'Group')}</b><small>${prettyDate(session.date)} · ${prettyTime(session.time)} · ${esc(coach(session.coachId)?.name||'Coach')}</small></div>${clientAttendanceChip(booking.attendance||'unmarked')}</div>`).join(''):'<div class="empty">No sessions booked yet.</div>'}</div></section>`;
+      const packagePanel=`<section class="client-profile-grid"><section class="card"><div class="section-title"><h2>Package & Billing</h2><span>Coach view</span></div><div class="client-detail-list"><div class="client-detail-row"><span>Package</span><b>${esc(client.package||'Unassigned')}</b></div><div class="client-detail-row"><span>Charge date</span><b>${client.chargeDate?esc(client.chargeDate):'Not set'}</b></div><div class="client-detail-row"><span>Scheduled sessions</span><b>${rows.length}</b></div><div class="client-detail-row"><span>Upcoming sessions</span><b>${upcoming}</b></div></div></section><section class="card"><div class="section-title"><h2>Attendance</h2><span>Marked data</span></div><div class="client-summary-metrics"><div class="client-summary-metric"><b>${attended}</b><small>Attended</small></div><div class="client-summary-metric"><b>${rows.filter(x=>attendanceVisual(x.booking.attendance)==='rescheduled').length}</b><small>Rescheduled</small></div><div class="client-summary-metric"><b>${rows.filter(x=>attendanceVisual(x.booking.attendance)==='cancelled').length}</b><small>Cancelled</small></div></div></section></section>`;
+      const notes=`<section class="card"><div class="section-title"><h2>Coach Notes</h2><span>Private</span></div><p class="hint">Notes are saved to the secure client record and never displayed on the public Live Feed or Gym View.</p><textarea class="client-note-area" id="clientNotesArea" placeholder="Add private coaching notes, goals, restrictions, or follow-up details.">${esc(client.notes||'')}</textarea><div class="modal-actions"><button class="btn primary" id="saveClientNotes">Save Notes</button></div></section>`;
+      const details=`<section class="client-profile-grid"><section class="card"><div class="section-title"><h2>Contact & Account</h2><span>Private</span></div><div class="client-detail-list"><div class="client-detail-row"><span>Email</span><b>${esc(client.email||'Not set')}</b></div><div class="client-detail-row"><span>Phone</span><b>${esc(client.phone||'Not set')}</b></div><div class="client-detail-row"><span>Client code</span><b>${esc(clientDashboardCode(client))}</b></div><div class="client-detail-row"><span>Record type</span><b>Client Portal</b></div></div></section><section class="card"><div class="section-title"><h2>Quick Actions</h2><span>Coach tools</span></div><div class="button-grid"><button class="btn" id="detailBook">+ Book Session</button><button class="btn" id="detailEdit">Edit Client</button><button class="btn danger" id="detailDelete">Delete Client</button></div></section></section>`;
+      const panels={overview,sessions,package:packagePanel,notes,details};
+      openModal(`<div class="modal-head"><button class="btn ghost" id="backToClientList">← Clients</button><button class="btn ghost" onclick="closeModal()">Close</button></div><section class="client-profile-hero"><div class="client-profile-avatar">${esc(clientInitials(client.name))}</div><div><div class="eyebrow">Client Record</div><h2 class="client-profile-name">${esc(client.name||'Client')}</h2><div class="client-profile-contact"><span>✉ ${esc(client.email||'No email')}</span><span>◉ ${esc(client.phone||'No phone')}</span><span>▦ ${esc(clientDashboardCode(client))}</span></div><div class="client-profile-contact"><span>◈ ${esc(client.package||'Unassigned')}</span><span>◷ Charge date: ${client.chargeDate?esc(client.chargeDate):'Not set'}</span></div></div><div class="client-profile-actions"><button class="btn" id="editClientProfile">Edit Client</button><button class="btn primary" id="bookClientProfile">+ Book</button></div></section><nav class="client-profile-tabs">${[['overview','Overview'],['sessions','Sessions'],['package','Package'],['notes','Notes'],['details','Details']].map(([id,label])=>`<button class="client-profile-tab ${activeTab===id?'active':''}" data-client-tab="${id}">${label}</button>`).join('')}</nav>${Object.entries(panels).map(([id,html])=>`<section class="client-profile-panel ${activeTab===id?'active':''}" data-client-panel="${id}">${html}</section>`).join('')}`, 'client-manager-modal');
+      document.getElementById('backToClientList').onclick=openClients;document.getElementById('editClientProfile').onclick=()=>openClientEditor(client.id);document.getElementById('bookClientProfile').onclick=()=>openClientBooking(client.id);document.getElementById('detailBook')?.addEventListener('click',()=>openClientBooking(client.id));document.getElementById('detailEdit')?.addEventListener('click',()=>openClientEditor(client.id));document.getElementById('detailDelete')?.addEventListener('click',async()=>{if(!confirm('Delete this client record and its saved bookings?'))return;await commit(mut=>{mut.clients=mut.clients.filter(c=>c.id!==client.id);mut.bookings=mut.bookings.filter(b=>b.clientId!==client.id)},'Client deleted.');openClients()});
+      modal.querySelectorAll('[data-client-tab]').forEach(btn=>btn.onclick=()=>{activeTab=btn.dataset.clientTab;draw()});
+      document.getElementById('saveClientNotes')?.addEventListener('click',async()=>{const notes=document.getElementById('clientNotesArea').value.trim();await commit(mut=>{const target=mut.clients.find(c=>c.id===client.id);if(target)target.notes=notes},'Client notes saved.');openClientDashboard(client.id)});
+    };
+    draw();
+  }
+  function openClientImport(){
+    openModal(`<div class="modal-head"><div><div class="eyebrow">Client Portal</div><h2>Import Clients</h2><p>Drop a TXT or CSV file. Supported columns: name, email, phone, package, charge date.</p></div><button class="btn ghost" onclick="openClients()">Back</button></div><div class="dropzone" id="clientImportDrop"><b>Drop client TXT / CSV here</b><span>Existing records match by email and update safely.</span><input id="clientImportFile" type="file" accept=".txt,.csv,text/plain" class="hidden"></div><div class="modal-actions"><button class="btn" id="chooseClientImport">Choose File</button><button class="btn ghost" onclick="openClients()">Cancel</button></div>`, 'client-manager-modal');
+    const consume=async file=>{if(!file)return;const draft=clone(state.clients||[]);const result=parseClientImport(await file.text(),draft);if(!result.added&&!result.updated){toast('No usable client records were found.','error');return}await commit(mut=>{mut.clients=draft},`Imported ${result.added} new / ${result.updated} updated clients.`);openClients()};
+    document.getElementById('chooseClientImport').onclick=()=>document.getElementById('clientImportFile').click();document.getElementById('clientImportFile').onchange=e=>consume(e.target.files[0]);const dz=document.getElementById('clientImportDrop');['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>consume(e.dataTransfer.files[0]));
+  }
+  function openClients(){
+    let q='', packageFilter='All Clients';
+    const draw=()=>{
+      const packages=[...new Set((state.clients||[]).map(c=>(c.package||'Unassigned').trim()||'Unassigned'))].sort((a,b)=>a.localeCompare(b));
+      const list=(state.clients||[]).filter(c=>{const hay=[c.name,c.email,c.phone,c.package,c.chargeDate,c.notes].join(' ').toLowerCase();return (!q||hay.includes(q.toLowerCase()))&&(packageFilter==='All Clients'||(c.package||'Unassigned')===packageFilter)}).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+      const booked=(state.bookings||[]).filter(b=>['approved','confirmed'].includes(b.status||'approved')).length;
+      openModal(`<div class="modal-head"><div><div class="eyebrow">Client Portal</div><h2>Client Management</h2><p>Open a client card for a complete private dashboard with sessions, attendance, package details, and coaching notes.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><section class="client-directory-hero"><div><b>Client directory</b><p class="hint">Saved client records are server-backed and used for booking, attendance, reporting, and client history.</p></div><div class="client-directory-stat"><div><b>${(state.clients||[]).length}</b><small>Clients</small></div><div><b>${packages.length}</b><small>Packages</small></div><div><b>${booked}</b><small>Bookings</small></div></div></section><div class="client-directory-controls"><input class="search" id="clientSearch" placeholder="Search name, package, email, or phone" value="${esc(q)}"><button class="btn" id="importClientBtn">Import TXT / CSV</button><button class="btn primary" id="addClientBtn">+ Client</button></div><div class="client-filter-strip">${['All Clients',...packages].map(name=>`<button class="filter-btn ${packageFilter===name?'active':''}" data-client-package-filter="${esc(name)}">${esc(name)}</button>`).join('')}</div><section class="client-directory-grid">${list.length?list.map(clientDirectoryCard).join(''):'<div class="client-picker-empty"><b>No clients found</b>Adjust the filters or add a new client record.</div>'}</section><div class="modal-actions"><span class="hint">Click any client card to open their detailed dashboard.</span><button class="btn ghost" onclick="closeModal()">Close</button></div>`, 'client-manager-modal');
+      document.getElementById('clientSearch').oninput=e=>{q=e.target.value;draw()};document.getElementById('importClientBtn').onclick=openClientImport;document.getElementById('addClientBtn').onclick=()=>openClientEditor();modal.querySelectorAll('[data-client-package-filter]').forEach(btn=>btn.onclick=()=>{packageFilter=btn.dataset.clientPackageFilter;draw()});modal.querySelectorAll('[data-open-client]').forEach(btn=>btn.onclick=()=>openClientDashboard(btn.dataset.openClient));
+    };
+    draw();
+  }
+  function importClients(txt){const lines=txt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!lines.length)return{added:0,updated:0};const delim=lines[0].includes('\t')?'\t':lines[0].includes('|')?'|':',';const rows=lines.map(x=>x.split(delim).map(y=>y.trim()));const header=rows[0].map(x=>x.toLowerCase());const has=header.some(x=>/name|email|phone/.test(x));let start=has?1:0;const idx=n=>has?Math.max(0,header.findIndex(x=>x.includes(n))):n==='name'?0:n==='email'?1:n==='phone'?2:n==='package'?3:4;let added=0,updated=0;for(let i=start;i<rows.length;i++){const r=rows[i];const entry={name:r[idx('name')]||'',email:r[idx('email')]||'',phone:r[idx('phone')]||'',package:r[idx('package')]||'Unassigned',chargeDate:r[idx('charge')]||''};if(!entry.name&&!entry.email)continue;let c=state.clients.find(x=>entry.email&&x.email.toLowerCase()===entry.email.toLowerCase());if(c){Object.assign(c,{...c,...entry});updated++}else{state.clients.push({id:uid(),...entry});added++}}return{added,updated}}
+
+  function reportDate(d){return new Date(d+'T12:00:00')}
+  function reportTimeEnd(time,minutes){const [h,m]=String(time||'00:00').split(':').map(Number);const total=(h*60+m+(+minutes||60));const hh=Math.floor(total/60)%24, mm=total%60;return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`}
+  function round2(n){return Math.round((Number(n)||0)*100)/100}
+  function money(n){return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0)}
+  function fileStamp(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+  function reportScope(filters){
+    const start=filters.start||iso(monday(new Date()));
+    const end=filters.end||iso(addDays(monday(new Date()),4));
+    const from=start<=end?start:end, to=start<=end?end:start;
+    const allowed=(state.sessions||[]).filter(s=>s.date>=from&&s.date<=to&&(filters.coachId==='all'||s.coachId===filters.coachId)&&(filters.includeCanceled||s.status!=='canceled')).sort((a,b)=>`${a.date}|${a.time}|${coach(a.coachId)?.name||''}`.localeCompare(`${b.date}|${b.time}|${coach(b.coachId)?.name||''}`));
+    const ids=new Set(allowed.map(s=>s.id));
+    const activeBookings=(state.bookings||[]).filter(b=>ids.has(b.sessionId)&&['approved','confirmed'].includes(b.status||'approved'));
+    const bySession=new Map();
+    for(const b of activeBookings){if(!bySession.has(b.sessionId))bySession.set(b.sessionId,[]);bySession.get(b.sessionId).push(b)}
+    const attendance={unmarked:0,present:0,rescheduled:0,cancelled:0,late:0,absent:0,excused:0};
+    for(const b of activeBookings){attendance[b.attendance||'unmarked']=(attendance[b.attendance||'unmarked']||0)+1}
+    const sessions=allowed.map(s=>{
+      const t=type(s.classTypeId), c=coach(s.coachId), books=bySession.get(s.id)||[];
+      const counts={unmarked:0,present:0,rescheduled:0,cancelled:0,late:0,absent:0,excused:0};
+      for(const b of books){const key=b.attendance||'unmarked';counts[key]=(counts[key]||0)+1}
+      const attending=counts.present+counts.late;
+      return {session:s,type:t,coach:c,bookings:books,attendance:counts,attending};
+    });
+    return {filters:{...filters,start:from,end:to},sessions,bookings:activeBookings,bySession,attendance,scheduledHours:round2(sessions.reduce((sum,row)=>sum+(+row.session.durationMinutes||60)/60,0))};
+  }
+  function reportMetrics(data){
+    const booked=data.bookings.length, marked=booked-(data.attendance.unmarked||0), present=(data.attendance.present||0)+(data.attendance.late||0);
+    return {sessions:data.sessions.length,hours:data.scheduledHours,booked,marked,present,attendanceRate:booked?Math.round(present/booked*100):0};
+  }
+  function reportScopeText(filters){const coachName=filters.coachId==='all'?'All active coaches':(coach(filters.coachId)?.name||'Selected coach');return `${prettyDate(filters.start)} - ${prettyDate(filters.end)} · ${coachName}`}
+  function defaultReportPeriod(base=new Date()){const anchor=new Date(2026,6,2);anchor.setHours(0,0,0,0);const current=new Date(base.getFullYear(),base.getMonth(),base.getDate());const span=15;let diff=Math.floor((current-anchor)/86400000);if(diff<0)diff=0;const start=addDays(anchor,Math.floor(diff/span)*span);const end=addDays(start,14);return {start:iso(start),end:iso(end)}}
+  function reportAttendanceTotals(rows){
+    const total={booked:0,unmarked:0,present:0,rescheduled:0,cancelled:0,late:0,absent:0,excused:0};
+    rows.forEach(row=>row.bookings.forEach(b=>{const key=b.attendance||'unmarked';total.booked++;total[key]=(total[key]||0)+1}));
+    total.attended=(total.present||0)+(total.late||0);total.rescheduled=(total.rescheduled||0)+(total.excused||0);total.cancelled=(total.cancelled||0)+(total.absent||0);total.marked=total.booked-total.unmarked;total.attendanceRate=total.booked?Math.round(total.attended/total.booked*100):0;
+    return total;
+  }
+  function sessionIsCompleted(row){
+    const today=iso(new Date());
+    const marked=row.bookings.some(b=>(b.attendance||'unmarked')!=='unmarked');
+    return row.session.status==='active'&&row.session.date<=today&&marked;
+  }
+  function staffReportRows(data){
+    const periodClients=(state.clients||[]).filter(c=>c.signupDate&&c.signupDate>=data.filters.start&&c.signupDate<=data.filters.end);
+    const candidates=(state.coaches||[]).filter(c=>c.active!==false&&(data.filters.coachId==='all'||c.id===data.filters.coachId));
+    return candidates.map(c=>{
+      const rows=data.sessions.filter(row=>row.session.coachId===c.id);
+      const completedRows=rows.filter(sessionIsCompleted);
+      const attendance=reportAttendanceTotals(rows);
+      const formats=['Group','Semi-Private','1-on-1'].map(kind=>{
+        const all=rows.filter(r=>r.session.kind===kind);const completed=all.filter(sessionIsCompleted);const a=reportAttendanceTotals(all);
+        return {kind,sessions:all.length,completed:completed.length,attended:a.attended,rescheduled:a.rescheduled,cancelled:a.cancelled,booked:a.booked,rate:a.attendanceRate};
+      });
+      const signups=periodClients.filter(client=>client.signupOwnerId===c.id);
+      const sessionCommissionRate=Number(c.sessionCommissionRate)||0;
+      const signupBonusRate=Number(c.signupBonusRate??15)||0;
+      const coachingCommission=round2(attendance.attended*sessionCommissionRate);
+      const memberBonus=round2(signups.length*signupBonusRate);
+      return {coach:c,rows,completedRows,completed:completedRows.length,scheduled:rows.length,scheduledHours:round2(rows.reduce((n,r)=>n+(r.session.durationMinutes||60)/60,0)),attendance,formats,signups,sessionCommissionRate,signupBonusRate,coachingCommission,memberBonus,totalCommission:round2(coachingCommission+memberBonus)};
+    });
+  }
+  function staffKpis(staff){
+    const coaches=staff.filter(r=>r.coach.role!=='Manager');
+    const completed=staff.reduce((n,r)=>n+r.completed,0), attendance=staff.reduce((n,r)=>n+r.attendance.attended,0), signups=staff.reduce((n,r)=>n+r.signups.length,0), commission=staff.reduce((n,r)=>n+r.totalCommission,0), booked=staff.reduce((n,r)=>n+r.attendance.booked,0);
+    return {completed,attendance,signups,commission,booked,attendanceRate:booked?Math.round(attendance/booked*100):0,coaches:coaches.length,managers:staff.filter(r=>r.coach.role==='Manager').length};
+  }
+  function staffInitials(c){return String(c?.name||'AX').split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase()}
+  function staffRoleClass(c){return c?.role==='Manager'?'manager':''}
+  function reportStaffAdminPanel(){
+    if(!isAdmin())return '';
+    const staff=activeCoaches();
+    return `<section class="staff-admin-panel"><div class="staff-admin-head"><div><h3>Staff Roster & Access Setup</h3><p>Add coaches/managers here, then use Permissions for employee PINs and feature-level access. Compensation values feed the report tiles and exports immediately.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn permission-admin" id="openPermissionsFromReports">Permissions</button><button class="btn" id="addStaffFromReports">+ Coach / Manager</button></div></div><div class="staff-admin-list">${staff.map(c=>`<div class="staff-admin-row" data-report-staff-row="${esc(c.id)}"><div><label>Name</label><input data-report-staff-name value="${esc(c.name)}"></div><div><label>Role</label><select data-report-staff-role><option ${c.role==='Admin / Coach'?'selected':''}>Admin / Coach</option><option ${c.role==='Coach'?'selected':''}>Coach</option><option ${c.role==='Manager'?'selected':''}>Manager</option></select></div><div><label>Pay / hr</label><input data-report-staff-pay type="number" min="0" step="0.01" value="${Number(c.payRate)||0}"></div><div><label>Commission</label><input data-report-staff-session-commission type="number" min="0" step="0.01" value="${Number(c.sessionCommissionRate)||0}"></div><div><label>Member bonus</label><input data-report-staff-signup-bonus type="number" min="0" step="0.01" value="${Number(c.signupBonusRate??15)}"></div><div><label>Active</label><select data-report-staff-active><option value="true" ${c.active!==false?'selected':''}>Active</option><option value="false" ${c.active===false?'selected':''}>Inactive</option></select></div><div style="display:flex;justify-content:flex-end;align-items:end;height:100%">${c.id==='jordan'?'':`<button class="x-btn" data-report-staff-delete="${esc(c.id)}">×</button>`}</div></div>`).join('')}</div><div class="staff-rate-actions"><span>Changes here replace the old Coaches button and are saved to the shared staff record.</span><button class="btn primary" id="saveReportStaffRoster">Save staff setup</button></div></section>`;
+  }
+  function bindReportStaffAdmin(refresh=()=>{}){
+    if(!isAdmin())return;
+    document.getElementById('openPermissionsFromReports')?.addEventListener('click',openPermissions);
+    document.getElementById('addStaffFromReports')?.addEventListener('click',async()=>{try{await commit(mut=>{const next={id:uid(),name:'New Employee',role:'Coach',active:true,payRate:0,sessionCommissionRate:0,signupBonusRate:15,permissions:roleDefaults('Coach')};mut.coaches=[...(mut.coaches||[]),next];mut.availability=clone(mut.availability||{});mut.availability[next.id]={Mon:{},Tue:{},Wed:{},Thu:{},Fri:{}}},'Employee added.');refresh()}catch(e){toast(e.message||'Employee could not be added.','error')}});
+    modal.querySelectorAll('[data-report-staff-delete]').forEach(btn=>btn.onclick=async()=>{const id=btn.dataset.reportStaffDelete;try{await commit(mut=>{mut.coaches=(mut.coaches||[]).filter(c=>c.id!==id);if(mut.availability)delete mut.availability[id]},'Employee removed.');refresh()}catch(e){toast(e.message||'Employee could not be removed.','error')}});
+    document.getElementById('saveReportStaffRoster')?.addEventListener('click',async()=>{try{const rows=[...modal.querySelectorAll('[data-report-staff-row]')].map(row=>({id:row.dataset.reportStaffRow,name:row.querySelector('[data-report-staff-name]').value.trim(),role:row.querySelector('[data-report-staff-role]').value,payRate:Math.max(0,Number(row.querySelector('[data-report-staff-pay]').value)||0),sessionCommissionRate:Math.max(0,Number(row.querySelector('[data-report-staff-session-commission]').value)||0),signupBonusRate:Math.max(0,Number(row.querySelector('[data-report-staff-signup-bonus]').value)||15),active:row.querySelector('[data-report-staff-active]').value==='true'}));await commit(mut=>{for(const row of rows){const c=(mut.coaches||[]).find(x=>x.id===row.id);if(c){Object.assign(c,row)}}},'Staff setup saved.');refresh()}catch(e){toast(e.message||'Staff setup could not be saved.','error')}});
+  }
+  function staffRateEditor(r,context='card'){
+    const c=r.coach||{}, editable=userCan('manageCompensation');
+    return `<div class="staff-rate-editor ${context==='detail'?'staff-detail-rate-panel':''} ${editable?'':'permission-protected'}" data-staff-rates="${esc(c.id)}"><div class="staff-rate-grid"><div class="staff-rate-field"><label>Hourly pay</label><input data-staff-pay type="number" min="0" step="0.01" value="${Number(c.payRate)||0}" ${editable?'':'disabled'}></div><div class="staff-rate-field"><label>Commission / attended</label><input data-staff-session-commission type="number" min="0" step="0.01" value="${Number(c.sessionCommissionRate)||0}" ${editable?'':'disabled'}></div><div class="staff-rate-field"><label>New member bonus</label><input data-staff-signup-bonus type="number" min="0" step="0.01" value="${Number(c.signupBonusRate??15)}" ${editable?'':'disabled'}></div></div><div class="staff-rate-actions"><span>${editable?'Saved to staff record and used in exports.':'View only. Admin permission required to edit compensation.'}</span>${editable?`<button class="btn primary" data-save-staff-rates="${esc(c.id)}">Save rates</button>`:''}</div></div>`;
+  }
+  function bindStaffRateSaves(refresh=()=>{}){
+    modal.querySelectorAll('[data-save-staff-rates]').forEach(btn=>btn.onclick=async()=>{
+      if(!userCan('manageCompensation')){toast('Admin compensation permission required.','error');return}const id=btn.dataset.saveStaffRates, wrap=[...modal.querySelectorAll('[data-staff-rates]')].find(x=>x.dataset.staffRates===id);if(!wrap)return;
+      const pay=Math.max(0,Number(wrap.querySelector('[data-staff-pay]')?.value)||0), sessionCommission=Math.max(0,Number(wrap.querySelector('[data-staff-session-commission]')?.value)||0), signupBonus=Math.max(0,Number(wrap.querySelector('[data-staff-signup-bonus]')?.value)||0);
+      try{await commit(mut=>{const target=(mut.coaches||[]).find(c=>c.id===id);if(target){target.payRate=pay;target.sessionCommissionRate=sessionCommission;target.signupBonusRate=signupBonus}},'Staff compensation saved.');refresh()}catch(e){toast(e.message||'Compensation could not be saved.','error')}
+    });
+  }
+  function staffMetricCard(label,value,detail=''){return `<div class="staff-kpi"><small>${esc(label)}</small><b>${esc(String(value))}</b>${detail?`<span>${esc(detail)}</span>`:''}</div>`}
+  function staffPerformanceCard(r){
+    const manager=r.coach.role==='Manager';
+    const firstLabel=manager?'New member sign-ups':'Total attendance';
+    const firstValue=manager?r.signups.length:r.attendance.attended;
+    const secondLabel=manager?'Bonus / member':'Completed sessions';
+    const secondValue=manager?money(r.signupBonusRate):r.completed;
+    const thirdLabel=manager?'Total bonus':'Attendance rate';
+    const thirdValue=manager?money(r.memberBonus):`${r.attendance.attendanceRate}%`;
+    const totalLabel=manager?'Member incentive':'Total commission';
+    const totalValue=manager?r.memberBonus:r.totalCommission;
+    return `<article class="staff-performance-card ${manager?'manager':''}"><div class="staff-card-head"><div class="staff-card-ident"><div class="staff-avatar">${esc(staffInitials(r.coach))}</div><div><b>${esc(r.coach.name)}</b><span>${esc(r.coach.role||'Staff')}</span></div></div><span class="staff-role-chip">${manager?'Member growth':'Coaching'}</span></div><div class="staff-card-metrics"><div class="staff-card-metric"><b>${esc(String(firstValue))}</b><small>${esc(firstLabel)}</small></div><div class="staff-card-metric"><b>${esc(String(secondValue))}</b><small>${esc(secondLabel)}</small></div><div class="staff-card-metric"><b>${esc(String(thirdValue))}</b><small>${esc(thirdLabel)}</small></div></div>${staffRateEditor(r,'card')}<div class="staff-card-footer"><span>${manager?`${r.signups.length} attributed signup${r.signups.length===1?'':'s'}`:`${r.formats.map(x=>`${x.kind.replace('Semi-Private','Semi')}: ${x.attended}`).join(' · ')}`}</span><b>${esc(totalLabel)} ${money(totalValue)}</b></div><div class="modal-actions" style="margin:13px 0 0;justify-content:flex-end"><button class="btn ghost" data-open-staff-report="${esc(r.coach.id)}">Open dashboard</button></div></article>`;
+  }
+  function formatBreakdown(r){
+    return `<div class="staff-format-table"><div class="staff-format-row header"><span>Session format</span><span>Completed</span><span>Attended</span><span>Rescheduled</span><span>Cancelled</span><span>Rate</span></div>${r.formats.map(f=>`<div class="staff-format-row"><b>${esc(f.kind)}</b><span>${f.completed}</span><span class="good">${f.attended}</span><span class="warn">${f.rescheduled}</span><span class="bad">${f.cancelled}</span><span>${f.rate}%</span></div>`).join('')}</div>`;
+  }
+  function staffReportExportOptions(data,staff){
+    const metrics=reportMetrics(data), kpis=staffKpis(staff);
+    return `<div class="report-export-grid"><article class="report-export-card"><h3>Staff Performance Workbook</h3><p>Premium Excel workbook with staff dashboard, completed training sessions, class-format attendance, coaching commission, member sign-ups, and incentive totals.</p><div class="report-export-meta"><span>${staff.length} staff</span><span>${kpis.attendance} attendance</span><span>6+ sheets</span></div><button class="btn primary" id="exportStaffWorkbook">Export Staff Performance (.xlsx)</button></article><article class="report-export-card"><h3>Staff Dashboard PDF</h3><p>Print the live dashboard as a polished PDF-ready staff report. The browser print dialog lets you choose <b>Save as PDF</b>.</p><div class="report-export-meta"><span>Digital dashboard</span><span>PDF ready</span></div><button class="btn" id="printAllStaffDashboard">Save Staff Dashboard as PDF</button></article><article class="report-export-card"><h3>Training Session Workbook</h3><p>Detailed operations workbook: session register, attendance detail, client attendance, payroll hours, and training-class analysis.</p><div class="report-export-meta"><span>${metrics.sessions} sessions</span><span>${metrics.booked} bookings</span></div><button class="btn" id="exportTrainingWorkbook">Export Training Operations (.xlsx)</button></article><article class="report-export-card"><h3>Raw Report Data</h3><p>Portable JSON archive of the selected report scope, useful for audit backups or moving to a future software stack.</p><div class="report-export-meta"><span>Archive</span><span>JSON</span></div><button class="btn ghost" id="exportReportJson">Download Report JSON</button></article></div>`;
+  }
+  function openReports(){
+    const period=defaultReportPeriod(new Date()), start=period.start;
+    let filters={start:period.start,end:period.end,coachId:userCan('viewAllReports')?'all':userStaffId(),includeCanceled:false},view='dashboard';
+    const draw=()=>{
+      if(!userCan('viewAllReports')&&filters.coachId!==userStaffId())filters.coachId=userStaffId();
+      const data=reportScope(filters), staff=staffReportRows(data), kpis=staffKpis(staff), metrics=reportMetrics(data);
+      const dashboard=`${!userCan('viewAllReports')?'<div class="restricted-report-note">Your access is limited to your own report dashboard. Admins can grant all-staff payroll visibility from Permissions.</div>':''}${reportStaffAdminPanel()}<div class="staff-report-hero"><div><b>Staff performance command center</b><p>Coach dashboards prioritize total attendance, class-format attendance, and coaching commission from attended client markers. Admins manage roster, permissions, and compensation directly from this Reports workflow.</p></div><div class="staff-report-hero-actions"><button class="btn primary" id="printStaffDashboard">Save PDF</button><button class="btn ghost" id="showExports">Export center</button></div></div><div class="staff-kpi-grid">${staffMetricCard('Total attendance',kpis.attendance,'Attended client markers')}${staffMetricCard('Completed sessions',kpis.completed,'Sessions with attendance marked')}${staffMetricCard('Coaching commission',money(staff.reduce((n,r)=>n+r.coachingCommission,0)),'Attendance rate × commission')}${staffMetricCard('New member sign-ups',kpis.signups,'Attributed within selected range')}${staffMetricCard('Staff incentives',money(kpis.commission),`${kpis.coaches} coaches · ${kpis.managers} managers`)}</div><section class="staff-card-grid">${staff.length?staff.map(staffPerformanceCard).join(''):'<div class="staff-empty">No active staff records match the selected filter.</div>'}</section>`;
+      const exportView=staffReportExportOptions(data,staff);
+      openModal(`<div class="staff-report-title"><div><div class="eyebrow">Reporting Center</div><h2>Staff Performance Reports</h2><p>Coach commission, member-signup incentives, attendance, payroll context, and export-ready dashboards all live here.</p></div><div style="display:flex;gap:8px;align-items:flex-start"><span class="staff-period">${esc(reportScopeText(filters))}</span><button class="btn ghost" onclick="closeModal()">Close</button></div></div><div class="report-filters"><div class="field"><label>Pay period start</label><input id="reportStart" type="date" value="${filters.start}"></div><div class="field"><label>Pay period end</label><input id="reportEnd" type="date" value="${filters.end}"></div><div class="field"><label>Coach / manager</label><select id="reportCoach">${userCan('viewAllReports')?`<option value="all" ${filters.coachId==='all'?'selected':''}>All active staff</option>`:''}${reportableCoaches().map(c=>`<option value="${esc(c.id)}" ${filters.coachId===c.id?'selected':''}>${esc(c.name)} · ${esc(c.role)}</option>`).join('')}</select></div><label class="report-toggle"><input id="reportCanceled" type="checkbox" ${filters.includeCanceled?'checked':''}> Include canceled sessions</label></div><div class="report-view-tabs"><button class="report-view-tab ${view==='dashboard'?'active':''}" data-report-view="dashboard">Staff Dashboard</button><button class="report-view-tab ${view==='exports'?'active':''}" data-report-view="exports">Export Center</button></div><section id="reportViewBody">${view==='dashboard'?dashboard:exportView}</section><div class="modal-actions"><span class="hint">Completed session = an active past/current session with at least one client attendance marker. Admins control permissions, compensation, roster, and report visibility. Non-admin staff only see reports they are allowed to view.</span><button class="btn ghost" onclick="closeModal()">Close</button></div>`, 'report-modal staff-report-modal');
+      const updateFilters=()=>{filters={start:document.getElementById('reportStart').value||start,end:document.getElementById('reportEnd').value||filters.end,coachId:document.getElementById('reportCoach').value,includeCanceled:document.getElementById('reportCanceled').checked};draw()};
+      document.getElementById('reportStart').onchange=updateFilters;document.getElementById('reportEnd').onchange=updateFilters;document.getElementById('reportCoach').onchange=updateFilters;document.getElementById('reportCanceled').onchange=updateFilters;
+      modal.querySelectorAll('[data-report-view]').forEach(btn=>btn.onclick=()=>{view=btn.dataset.reportView;draw()});
+      document.getElementById('showExports')?.addEventListener('click',()=>{view='exports';draw()});
+      bindReportStaffAdmin(draw);
+      document.getElementById('printStaffDashboard')?.addEventListener('click',()=>userCan('exportReports')?printStaffDashboard(data):toast('Report export permission required.','error'));
+      document.getElementById('printAllStaffDashboard')?.addEventListener('click',()=>userCan('exportReports')?printStaffDashboard(data):toast('Report export permission required.','error'));
+      modal.querySelectorAll('[data-open-staff-report]').forEach(btn=>btn.onclick=()=>openStaffDashboard(btn.dataset.openStaffReport,filters));
+      bindStaffRateSaves(()=>draw());
+      document.getElementById('exportStaffWorkbook')?.addEventListener('click',()=>userCan('exportReports')?exportExcelReport('staff',data):toast('Report export permission required.','error'));
+      document.getElementById('exportTrainingWorkbook')?.addEventListener('click',()=>userCan('exportReports')?exportExcelReport('training',data):toast('Report export permission required.','error'));
+      document.getElementById('exportReportJson')?.addEventListener('click',()=>download(`axon-performance-report-${fileStamp()}.json`,{generatedAt:new Date().toISOString(),scope:data.filters,staff:staff.map(r=>({coach:r.coach,completed:r.completed,attendance:r.attendance,signups:r.signups.length,totalCommission:r.totalCommission})),sessions:data.sessions.map(r=>({...r.session,classType:r.type.name,coach:r.coach?.name||'Coach',attendance:r.attendance,booked:r.bookings.length})),bookings:data.bookings,clients:state.clients||[]}));
+    };
+    draw();
+  }
+  function openStaffDashboard(staffId,filters){
+    const data=reportScope(filters), r=staffReportRows(data).find(x=>x.coach.id===staffId);if(!r){toast('Staff member is unavailable for this report.','error');openReports();return}
+    const manager=r.coach.role==='Manager';
+    const signupPanel=`<section class="card"><div class="section-title"><h2>New Member Sign-ups</h2><span>${r.signups.length} attributed</span></div><p class="hint">Member signup incentive is calculated from client records attributed to ${esc(r.coach.name)} inside the report date range.</p><div class="signup-list">${r.signups.length?r.signups.map(c=>`<div class="signup-row"><div><b>${esc(c.name||'Client')}</b><small>${esc(c.package||'Unassigned')} · ${c.signupDate?prettyDate(c.signupDate):'Signup date not set'}</small></div><span>+ ${money(r.signupBonusRate)}</span></div>`).join(''):'<div class="staff-empty">No attributed new members in this range.</div>'}</div></section>`;
+    const ratePanel=`<section class="card"><div class="section-title"><h2>Staff Compensation Setup</h2><span>Editable</span></div><p class="hint">Update hourly pay, coaching commission per attended client, and new member bonus here. These values feed the report tiles, Excel exports, and PDF dashboards.</p>${staffRateEditor(r,'detail')}</section>`;
+    openModal(`<div class="modal-head"><button class="btn ghost" id="staffReportBack">← Reports</button><button class="btn ghost" onclick="closeModal()">Close</button></div><section class="staff-detail-banner ${manager?'manager':''}"><div class="staff-detail-avatar">${esc(staffInitials(r.coach))}</div><div><div class="eyebrow">${manager?'Manager Incentive Dashboard':'Coach Performance Dashboard'}</div><h2>${esc(r.coach.name)}</h2><p>${esc(r.coach.role)} · ${esc(reportScopeText(data.filters))}</p></div><div class="staff-detail-actions">${userCan('exportReports')?'<button class="btn" id="printOneStaff">Save PDF</button><button class="btn primary" id="exportOneStaff">Export Excel</button>':''}</div></section><div class="staff-kpi-grid">${staffMetricCard('Total attendance',r.attendance.attended,'Attended client markers')}${staffMetricCard('Completed sessions',r.completed,`${r.attendance.attendanceRate}% attendance rate`)}${staffMetricCard('Coaching commission',money(r.coachingCommission),`${money(r.sessionCommissionRate)} per attended client`)}${staffMetricCard('New sign-ups',r.signups.length,`${money(r.signupBonusRate)} incentive per member`)}${staffMetricCard('Total incentive',money(r.totalCommission),'Coaching commission + member bonus')}</div>${ratePanel}<div class="staff-detail-grid"><section class="card"><div class="section-title"><h2>Completed Training & Attendance</h2><span>Group · Semi-Private · 1-on-1</span></div><p class="hint">Attendance detail is calculated from the session’s client markers: Attended, Rescheduled, and Cancelled.</p>${formatBreakdown(r)}</section><div style="display:grid;gap:14px"><section class="commission-card"><h3>Coaching Commission</h3><p>Total attended clients × the stored attendance commission rate.</p><div class="commission-big"><b>${money(r.coachingCommission)}</b><span>${r.attendance.attended} attended × ${money(r.sessionCommissionRate)}</span></div><div class="commission-list"><div><span>Scheduled hours</span><b>${r.scheduledHours.toFixed(1)} hrs</b></div><div><span>Booked clients</span><b>${r.attendance.booked}</b></div><div><span>Member bonus</span><b>${money(r.memberBonus)}</b></div></div></section>${signupPanel}</div></div>`, 'report-modal staff-report-modal');
+    document.getElementById('staffReportBack').onclick=openReports;
+    document.getElementById('printOneStaff')?.addEventListener('click',()=>userCan('exportReports')?printStaffDashboard(data,r.coach.id):toast('Report export permission required.','error'));
+    document.getElementById('exportOneStaff')?.addEventListener('click',()=>userCan('exportReports')?exportExcelReport('staff',data,r.coach.id):toast('Report export permission required.','error'));
+    bindStaffRateSaves(()=>openStaffDashboard(staffId,filters));
+  }
+  function pdfStyle(){return `@page{size:landscape;margin:.38in}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#F8F1E3;background:#05070A;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:24px;background:radial-gradient(circle at 90% 0,rgba(31,140,255,.24),transparent 30%),#05070A;min-height:7in}.head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:1px solid rgba(255,255,255,.18);padding-bottom:14px}.report-wordmark{display:block;width:182px;height:40px;object-fit:contain;object-position:left center;margin-bottom:7px}.ey{font-size:9px;letter-spacing:.17em;color:#64B4FF;font-weight:800;text-transform:uppercase}.title{font-size:27px;font-weight:900;letter-spacing:-1px;margin:3px 0}.sub{font-size:11px;color:#A9B4C2;max-width:620px;line-height:1.4}.period{font-size:10px;border:1px solid rgba(100,180,255,.6);padding:8px 10px;border-radius:999px;color:#64B4FF}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin:15px 0}.kpi{padding:11px;border:1px solid rgba(255,255,255,.15);border-radius:14px;background:#101A26}.kpi small{display:block;color:#A9B4C2;font-size:8px;text-transform:uppercase;letter-spacing:.08em;font-weight:800}.kpi b{display:block;margin-top:6px;font-size:21px}.kpi span{display:block;margin-top:4px;color:#64B4FF;font-size:9px}.staffs{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.staff{padding:13px;border:1px solid rgba(255,255,255,.15);border-radius:15px;background:#0D121A;break-inside:avoid}.staff h3{margin:0;font-size:16px}.staff .role{font-size:9px;color:#64B4FF;margin-top:3px;font-weight:bold}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:12px 0}.box{padding:8px;border:1px solid rgba(255,255,255,.10);border-radius:10px;background:#101A26}.box b{display:block;font-size:16px}.box small{display:block;color:#A9B4C2;margin-top:3px;font-size:8px;text-transform:uppercase}.line{border-top:1px solid rgba(255,255,255,.10);padding-top:8px;color:#A9B4C2;font-size:10px}.line b{float:right;color:#73D99F}.detail{margin-top:14px}.table{width:100%;border-collapse:collapse;margin-top:10px}.table th{color:#64B4FF;font-size:9px;text-align:left;padding:7px;border-bottom:1px solid rgba(255,255,255,.18)}.table td{font-size:10px;padding:8px 7px;border-bottom:1px solid rgba(255,255,255,.08)}.green{color:#73D99F}.yellow{color:#FFD166}.red{color:#FF6B6B}.foot{margin-top:13px;color:#A9B4C2;font-size:9px}`}
+  function printStaffDashboard(data,staffId=''){
+    const staff=staffReportRows(data).filter(r=>!staffId||r.coach.id===staffId);if(!staff.length){toast('No staff data is available for this report.','error');return}
+    const kpis=staffKpis(staff), title=staffId?`${staff[0].coach.name} - Staff Dashboard`:'Axon Performance - Staff Performance Dashboard';
+    const cards=staff.map(r=>`<article class="staff"><h3>${esc(r.coach.name)}</h3><div class="role">${esc(r.coach.role)}</div><div class="grid"><div class="box"><b>${r.attendance.attended}</b><small>Total attendance</small></div><div class="box"><b>${r.completed}</b><small>Completed sessions</small></div><div class="box"><b>${r.signups.length}</b><small>New sign-ups</small></div></div><div class="line">Coaching commission <b>${money(r.coachingCommission)}</b></div><div class="line">Member incentive <b>${money(r.memberBonus)}</b></div><div class="line">Total commission <b>${money(r.totalCommission)}</b></div>${staffId?`<div class="detail"><table class="table"><thead><tr><th>Format</th><th>Completed</th><th>Attended</th><th>Rescheduled</th><th>Cancelled</th><th>Rate</th></tr></thead><tbody>${r.formats.map(f=>`<tr><td>${esc(f.kind)}</td><td>${f.completed}</td><td class="green">${f.attended}</td><td class="yellow">${f.rescheduled}</td><td class="red">${f.cancelled}</td><td>${f.rate}%</td></tr>`).join('')}</tbody></table></div>`:''}</article>`).join('');
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${pdfStyle()}</style></head><body><main class="page"><header class="head"><div><img class="report-wordmark" src="${BRAND_ASSETS.wordmarkWhite}" alt="Axon Performance"><div class="ey">Axon Performance · Staff Reporting</div><div class="title">${esc(title)}</div><div class="sub">Total attendance, completed training sessions, coaching commission, and attributed new-member incentives.</div></div><div class="period">${esc(reportScopeText(data.filters))}</div></header><section class="kpis"><div class="kpi"><small>Total attendance</small><b>${kpis.attendance}</b><span>Attended client markers</span></div><div class="kpi"><small>Completed sessions</small><b>${kpis.completed}</b><span>${kpis.attendanceRate}% attendance rate</span></div><div class="kpi"><small>Coaching commission</small><b>${money(staff.reduce((n,r)=>n+r.coachingCommission,0))}</b><span>Per attended client</span></div><div class="kpi"><small>New member sign-ups</small><b>${kpis.signups}</b><span>Attributed to staff</span></div><div class="kpi"><small>Total incentives</small><b>${money(kpis.commission)}</b><span>Commission + member bonus</span></div></section><section class="staffs">${cards}</section><div class="foot">Generated ${esc(new Date().toLocaleString())} · Axon Performance Scheduling Command Center</div></main><script>window.onload=()=>setTimeout(()=>window.print(),220)<\/script></body></html>`;
+    const printWindow=window.open('', '_blank', 'width=1240,height=860');if(!printWindow){toast('Allow pop-ups to save the dashboard as a PDF.','error');return}printWindow.document.open();printWindow.document.write(html);printWindow.document.close();
+  }
+  function excelHex(value,fallback='1F8CFF'){return String(value||fallback).replace('#','').toUpperCase()}
+  async function ensureExcelJS(){
+    if(window.ExcelJS)return window.ExcelJS;
+    if(window.__axonExcelPromise)return window.__axonExcelPromise;
+    window.__axonExcelPromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';script.async=true;script.onload=()=>window.ExcelJS?resolve(window.ExcelJS):reject(new Error('Excel exporter could not load.'));script.onerror=()=>reject(new Error('Excel exporter could not load. Check your internet connection and retry.'));document.head.appendChild(script)});
+    return window.__axonExcelPromise;
+  }
+  function downloadBlob(name,blob){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200)}
+  function applyExcelHeader(ws,title,subtitle,columnCount){
+    const end=String.fromCharCode(64+Math.max(1,Math.min(26,columnCount)));
+    ws.mergeCells(`A1:${end}1`);ws.getCell('A1').value=title;ws.getCell('A1').font={name:'Aptos Display',size:18,bold:true,color:{argb:'F8F1E3'}};ws.getCell('A1').fill={type:'pattern',pattern:'solid',fgColor:{argb:'101A26'}};ws.getCell('A1').alignment={vertical:'middle'};ws.getRow(1).height=30;
+    ws.mergeCells(`A2:${end}2`);ws.getCell('A2').value=subtitle;ws.getCell('A2').font={name:'Aptos',size:10,color:{argb:'A9B4C2'}};ws.getCell('A2').fill={type:'pattern',pattern:'solid',fgColor:{argb:'0D121A'}};ws.getCell('A2').alignment={vertical:'middle'};ws.getRow(2).height=20;
+  }
+  function setupExcelSheet(ws,title,subtitle,columns){
+    applyExcelHeader(ws,title,subtitle,columns.length);ws.addRow([]);const header=ws.addRow(columns.map(c=>c.header));header.height=22;header.eachCell(cell=>{cell.font={name:'Aptos',size:10,bold:true,color:{argb:'F8F1E3'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'1F8CFF'}};cell.alignment={vertical:'middle',wrapText:true};cell.border={bottom:{style:'thin',color:{argb:'64B4FF'}}}});ws.views=[{state:'frozen',ySplit:4}];ws.autoFilter={from:{row:4,column:1},to:{row:4,column:columns.length}};columns.forEach((c,i)=>{ws.getColumn(i+1).width=c.width||16});
+  }
+  function styleExcelRows(ws,startRow,columns){
+    for(let r=startRow;r<=ws.rowCount;r++){const row=ws.getRow(r);row.height=19;row.eachCell((cell,col)=>{cell.font={name:'Aptos',size:10,color:{argb:'F8F1E3'}};cell.alignment={vertical:'middle',wrapText:columns[col-1]?.wrap||false};cell.border={bottom:{style:'hair',color:{argb:'334155'}}};if(r%2===1)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'0D121A'}}});}
+  }
+  function attendanceFill(status){return {present:'73D99F',rescheduled:'FFD166',cancelled:'FF6B6B',late:'FFD166',absent:'FF6B6B',excused:'64B4FF',unmarked:'64B4FF'}[status]||'64B4FF'}
+  function addSessionRegisterSheet(workbook,data){
+    const ws=workbook.addWorksheet('Session Register',{views:[{state:'frozen',ySplit:4}]});const cols=[{header:'Date',width:14},{header:'Day',width:10},{header:'Start',width:12},{header:'Finish',width:12},{header:'Coach',width:18},{header:'Role',width:16},{header:'Class Type',width:20},{header:'Format',width:15},{header:'Status',width:12},{header:'Duration (min)',width:14},{header:'Scheduled Hours',width:16},{header:'Capacity',width:11},{header:'Booked',width:10},{header:'Attended',width:11},{header:'Rescheduled',width:13},{header:'Cancelled',width:12},{header:'Unmarked',width:12},{header:'Attendance %',width:15},{header:'Client Names',width:32,wrap:true},{header:'Coach Notes',width:38,wrap:true}];setupExcelSheet(ws,'Training Session Register',`Reporting period: ${reportScopeText(data.filters)} · Generated ${new Date().toLocaleString()}`,cols);const statusCells=[];
+    data.sessions.forEach(row=>{const s=row.session,c=row.coach||{}, clientList=row.bookings.map(b=>state.clients.find(x=>x.id===b.clientId)?.name||'Client').join(', ');const rate=row.bookings.length?round2((row.attending/row.bookings.length)*100):0;const values=[reportDate(s.date),dayName(s.date),prettyTime(s.time),prettyTime(reportTimeEnd(s.time,s.durationMinutes)),c.name||'Coach',c.role||'Coach',row.type?.name||'Session',s.kind,s.status,s.durationMinutes,round2((s.durationMinutes||60)/60),s.capacity,row.bookings.length,row.attendance.present+(row.attendance.late||0),row.attendance.rescheduled+(row.attendance.excused||0),row.attendance.cancelled+(row.attendance.absent||0),row.attendance.unmarked,rate/100,clientList,s.notes||''];const excelRow=ws.addRow(values);excelRow.getCell(1).numFmt='mmm d, yyyy';excelRow.getCell(11).numFmt='0.00';excelRow.getCell(19).numFmt='0%';statusCells.push({cell:excelRow.getCell(9),status:s.status});});styleExcelRows(ws,5,cols);statusCells.forEach(({cell,status})=>{const color=status==='active'?'73D99F':status==='pending'?'FFD166':'FF6B6B';cell.font={name:'Aptos',size:10,bold:true,color:{argb:color}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:color+'22'}}});return ws;
+  }
+  function addAttendanceSheet(workbook,data){
+    const ws=workbook.addWorksheet('Attendance Detail',{views:[{state:'frozen',ySplit:4}]});const cols=[{header:'Session Date',width:15},{header:'Day',width:10},{header:'Start',width:12},{header:'Coach',width:18},{header:'Class Type',width:20},{header:'Format',width:15},{header:'Client',width:22},{header:'Email',width:30},{header:'Phone',width:17},{header:'Package',width:21},{header:'Charge Date',width:15},{header:'Booking Status',width:15},{header:'Attendance',width:15},{header:'Marked At',width:20},{header:'Session Notes',width:34,wrap:true}];setupExcelSheet(ws,'Client Attendance Detail',`Reporting period: ${reportScopeText(data.filters)} · One row per booked client`,cols);const attendanceCells=[];
+    data.sessions.forEach(row=>row.bookings.forEach(b=>{const c=state.clients.find(x=>x.id===b.clientId)||{};const status=b.attendance||'unmarked';const excelRow=ws.addRow([reportDate(row.session.date),dayName(row.session.date),prettyTime(row.session.time),row.coach?.name||'Coach',row.type?.name||'Session',row.session.kind,c.name||'Client',c.email||'',c.phone||'',c.package||'Unassigned',c.chargeDate?reportDate(c.chargeDate):'',b.status||'approved',attendanceLabel(status),b.attendanceMarkedAt?new Date(b.attendanceMarkedAt):'',row.session.notes||'']);excelRow.getCell(1).numFmt='mmm d, yyyy';excelRow.getCell(11).numFmt='mmm d, yyyy';excelRow.getCell(14).numFmt='mmm d, yyyy h:mm AM/PM';attendanceCells.push({cell:excelRow.getCell(13),status});}));styleExcelRows(ws,5,cols);attendanceCells.forEach(({cell,status})=>{const color=attendanceFill(status);cell.font={name:'Aptos',size:10,bold:true,color:{argb:color}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:color+'33'}}});return ws;
+  }
+  function addPayrollSheet(workbook,data){
+    const ws=workbook.addWorksheet('Coach Payroll',{views:[{state:'frozen',ySplit:4}]});const cols=[{header:'Coach',width:20},{header:'Role',width:18},{header:'Sessions',width:11},{header:'Scheduled Hours',width:16},{header:'Group',width:10},{header:'Semi-Private',width:15},{header:'1-on-1',width:11},{header:'Pay Rate / Hr',width:16},{header:'Estimated Payroll',width:19},{header:'Booked Clients',width:16},{header:'Attended',width:11},{header:'Rescheduled',width:13},{header:'Cancelled',width:12},{header:'Attendance %',width:15}];setupExcelSheet(ws,'Coach Payroll Summary',`Reporting period: ${reportScopeText(data.filters)} · Scheduled hours × stored coach pay rate`,cols);
+    const rows=[];for(const c of (state.coaches||[]).filter(c=>data.filters.coachId==='all'||c.id===data.filters.coachId)){const sessions=data.sessions.filter(r=>r.session.coachId===c.id);if(!sessions.length)continue;const hours=round2(sessions.reduce((n,r)=>n+(r.session.durationMinutes||60)/60,0));const booked=sessions.reduce((n,r)=>n+r.bookings.length,0),present=sessions.reduce((n,r)=>n+r.attendance.present+(r.attendance.late||0),0),rescheduled=sessions.reduce((n,r)=>n+r.attendance.rescheduled+(r.attendance.excused||0),0),cancelled=sessions.reduce((n,r)=>n+r.attendance.cancelled+(r.attendance.absent||0),0),rate=Number(c.payRate)||0;rows.push({c,sessions,hours,booked,present,rescheduled,cancelled,rate,group:sessions.filter(r=>r.session.kind==='Group').length,semi:sessions.filter(r=>r.session.kind==='Semi-Private').length,one:sessions.filter(r=>r.session.kind==='1-on-1').length})}
+    rows.forEach((r,i)=>{const excelRow=ws.addRow([r.c.name,r.c.role,r.sessions.length,r.hours,r.group,r.semi,r.one,r.rate,null,r.booked,r.present,r.rescheduled,r.cancelled,r.booked?round2(r.present/r.booked):0]);const rowNo=excelRow.number;excelRow.getCell(4).numFmt='0.00';excelRow.getCell(8).numFmt='$#,##0.00';excelRow.getCell(9).value={formula:`D${rowNo}*H${rowNo}`,result:round2(r.hours*r.rate)};excelRow.getCell(9).numFmt='$#,##0.00';excelRow.getCell(14).numFmt='0%';});styleExcelRows(ws,5,cols);if(rows.length){const total=ws.addRow(['TOTAL','', {formula:`SUM(C5:C${4+rows.length})`},{formula:`SUM(D5:D${4+rows.length})`},{formula:`SUM(E5:E${4+rows.length})`},{formula:`SUM(F5:F${4+rows.length})`},{formula:`SUM(G5:G${4+rows.length})`},'',{formula:`SUM(I5:I${4+rows.length})`},{formula:`SUM(J5:J${4+rows.length})`},{formula:`SUM(K5:K${4+rows.length})`},{formula:`SUM(L5:L${4+rows.length})`},{formula:`SUM(M5:M${4+rows.length})`},'']);total.eachCell(cell=>{cell.font={name:'Aptos',size:10,bold:true,color:{argb:'F8F1E3'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'1F8CFF'}}});total.getCell(4).numFmt='0.00';total.getCell(9).numFmt='$#,##0.00'}return ws;
+  }
+  function addClientSummarySheet(workbook,data){
+    const ws=workbook.addWorksheet('Client Attendance',{views:[{state:'frozen',ySplit:4}]});const cols=[{header:'Client',width:24},{header:'Email',width:30},{header:'Phone',width:17},{header:'Package',width:22},{header:'Charge Date',width:15},{header:'Sessions Booked',width:16},{header:'Attended',width:11},{header:'Rescheduled',width:13},{header:'Cancelled',width:12},{header:'Unmarked',width:12},{header:'Attendance %',width:15}];setupExcelSheet(ws,'Client Attendance Summary',`Reporting period: ${reportScopeText(data.filters)} · Active approved/confirmed bookings`,cols);
+    const maps=new Map();data.sessions.forEach(r=>r.bookings.forEach(b=>{const c=state.clients.find(x=>x.id===b.clientId)||{id:b.clientId,name:'Client',email:'',phone:'',package:'Unassigned'};if(!maps.has(c.id))maps.set(c.id,{client:c,booked:0,present:0,rescheduled:0,cancelled:0,late:0,absent:0,excused:0,unmarked:0});const row=maps.get(c.id);row.booked++;row[b.attendance||'unmarked']++;}));[...maps.values()].sort((a,b)=>a.client.name.localeCompare(b.client.name)).forEach(r=>{const c=r.client, excelRow=ws.addRow([c.name,c.email||'',c.phone||'',c.package||'Unassigned',c.chargeDate?reportDate(c.chargeDate):'',r.booked,r.present+(r.late||0),r.rescheduled+(r.excused||0),r.cancelled+(r.absent||0),r.unmarked,r.booked?round2((r.present+(r.late||0))/r.booked):0]);excelRow.getCell(5).numFmt='mmm d, yyyy';excelRow.getCell(12).numFmt='0%'});styleExcelRows(ws,5,cols);return ws;
+  }
+  function addClassSummarySheet(workbook,data){
+    const ws=workbook.addWorksheet('Class Type Summary',{views:[{state:'frozen',ySplit:4}]});const cols=[{header:'Class Type',width:24},{header:'Intensity',width:22},{header:'Sessions',width:12},{header:'Scheduled Hours',width:16},{header:'Booked Clients',width:16},{header:'Attended',width:11},{header:'Rescheduled',width:13},{header:'Cancelled',width:12},{header:'Attendance %',width:15}];setupExcelSheet(ws,'Class Type Summary',`Reporting period: ${reportScopeText(data.filters)} · Training volume by class type`,cols);const summary=new Map();data.sessions.forEach(r=>{const key=r.type?.id||r.session.classTypeId;if(!summary.has(key))summary.set(key,{type:r.type,sessions:0,hours:0,booked:0,present:0,rescheduled:0,cancelled:0,late:0,absent:0});const x=summary.get(key);x.sessions++;x.hours+=(r.session.durationMinutes||60)/60;x.booked+=r.bookings.length;x.present+=r.attendance.present+(r.attendance.late||0);x.rescheduled+=r.attendance.rescheduled+(r.attendance.excused||0);x.cancelled+=r.attendance.cancelled+(r.attendance.absent||0);});[...summary.values()].sort((a,b)=>(a.type?.name||'').localeCompare(b.type?.name||'')).forEach(x=>{const excelRow=ws.addRow([x.type?.name||'Session',x.type?.intensity||'Training',x.sessions,round2(x.hours),x.booked,x.present,x.rescheduled,x.cancelled,x.booked?round2(x.present/x.booked):0]);excelRow.getCell(4).numFmt='0.00';excelRow.getCell(9).numFmt='0%'});styleExcelRows(ws,5,cols);return ws;
+  }
+  function addStaffPerformanceSheet(workbook,data,staffId=''){
+    const staff=staffReportRows(data).filter(r=>!staffId||r.coach.id===staffId);
+    const title=staffId?`${staff[0]?.coach?.name||'Staff'} · Performance Dashboard`:'Staff Performance Dashboard';
+    const ws=workbook.addWorksheet(staffId?'Staff Detail':'Staff Dashboard',{views:[{state:'frozen',ySplit:4}]});
+    const cols=[{header:'Staff Member',width:22},{header:'Role',width:18},{header:'Completed Sessions',width:18},{header:'Group Completed',width:17},{header:'Semi-Private Completed',width:22},{header:'1-on-1 Completed',width:18},{header:'Attended Clients',width:17},{header:'Rescheduled',width:14},{header:'Cancelled',width:13},{header:'Attendance %',width:15},{header:'Commission / Attendance',width:20},{header:'Coaching Commission',width:20},{header:'New Member Sign-ups',width:21},{header:'Bonus / Member',width:18},{header:'Member Bonus',width:17},{header:'Total Incentives',width:18}];
+    setupExcelSheet(ws,title,`Reporting period: ${reportScopeText(data.filters)} · Commission is calculated from total attended clients`,cols);
+    staff.forEach(r=>{const f=Object.fromEntries(r.formats.map(x=>[x.kind,x]));const row=ws.addRow([r.coach.name,r.coach.role,r.completed,f.Group?.completed||0,f['Semi-Private']?.completed||0,f['1-on-1']?.completed||0,r.attendance.attended,r.attendance.rescheduled,r.attendance.cancelled,r.attendance.booked?round2(r.attendance.attended/r.attendance.booked):0,r.sessionCommissionRate,r.coachingCommission,r.signups.length,r.signupBonusRate,r.memberBonus,r.totalCommission]);row.getCell(10).numFmt='0%';[11,12,14,15,16].forEach(c=>row.getCell(c).numFmt='$#,##0.00')});
+    styleExcelRows(ws,5,cols);if(staff.length){const total=ws.addRow(['TOTAL','',{formula:`SUM(C5:C${4+staff.length})`},{formula:`SUM(D5:D${4+staff.length})`},{formula:`SUM(E5:E${4+staff.length})`},{formula:`SUM(F5:F${4+staff.length})`},{formula:`SUM(G5:G${4+staff.length})`},{formula:`SUM(H5:H${4+staff.length})`},{formula:`SUM(I5:I${4+staff.length})`},'', '',{formula:`SUM(L5:L${4+staff.length})`},{formula:`SUM(M5:M${4+staff.length})`},'',{formula:`SUM(O5:O${4+staff.length})`},{formula:`SUM(P5:P${4+staff.length})`}]);total.eachCell(cell=>{cell.font={name:'Aptos',size:10,bold:true,color:{argb:'F8F1E3'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'1F8CFF'}}});[12,15,16].forEach(c=>total.getCell(c).numFmt='$#,##0.00')}return ws;
+  }
+  function addCoachCommissionSheet(workbook,data,staffId=''){
+    const staff=staffReportRows(data).filter(r=>(r.coach.role==='Coach'||r.coach.role==='Admin / Coach')&&(!staffId||r.coach.id===staffId));
+    const ws=workbook.addWorksheet('Coaching Commission',{views:[{state:'frozen',ySplit:4}]});const cols=[{header:'Coach',width:22},{header:'Total Attendance',width:20},{header:'Commission / Attended Client',width:29},{header:'Coaching Commission',width:22},{header:'Group Completed',width:18},{header:'Semi-Private Completed',width:23},{header:'1-on-1 Completed',width:18},{header:'Attended Clients',width:18},{header:'Attendance %',width:15}];setupExcelSheet(ws,'Coaching Commission',`Reporting period: ${reportScopeText(data.filters)} · Commission based on total attended clients`,cols);
+    staff.forEach(r=>{const f=Object.fromEntries(r.formats.map(x=>[x.kind,x]));const row=ws.addRow([r.coach.name,r.attendance.attended,r.sessionCommissionRate,r.coachingCommission,f.Group?.completed||0,f['Semi-Private']?.completed||0,f['1-on-1']?.completed||0,r.attendance.attended,r.attendance.booked?round2(r.attendance.attended/r.attendance.booked):0]);[3,4].forEach(c=>row.getCell(c).numFmt='$#,##0.00');row.getCell(9).numFmt='0%'});styleExcelRows(ws,5,cols);return ws;
+  }
+  function addMemberSignupSheet(workbook,data,staffId=''){
+    const staff=staffReportRows(data).filter(r=>!staffId||r.coach.id===staffId);const byOwner=new Map(staff.map(r=>[r.coach.id,r]));
+    const rows=(state.clients||[]).filter(c=>c.signupDate&&c.signupDate>=data.filters.start&&c.signupDate<=data.filters.end&&byOwner.has(c.signupOwnerId)).sort((a,b)=>String(a.signupDate).localeCompare(String(b.signupDate))||String(a.name).localeCompare(String(b.name)));
+    const ws=workbook.addWorksheet('Member Sign-ups',{views:[{state:'frozen',ySplit:4}]});const cols=[{header:'Signup Date',width:16},{header:'Client',width:24},{header:'Email',width:30},{header:'Phone',width:18},{header:'Package',width:24},{header:'Attributed Staff',width:22},{header:'Role',width:18},{header:'Bonus / Member',width:18},{header:'Member Incentive',width:19}];setupExcelSheet(ws,'New Member Sign-ups',`Reporting period: ${reportScopeText(data.filters)} · Default bonus rate is $15 per member`,cols);
+    rows.forEach(c=>{const r=byOwner.get(c.signupOwnerId), row=ws.addRow([reportDate(c.signupDate),c.name||'Client',c.email||'',c.phone||'',c.package||'Unassigned',r.coach.name,r.coach.role,r.signupBonusRate,r.signupBonusRate]);row.getCell(1).numFmt='mmm d, yyyy';row.getCell(8).numFmt='$#,##0.00';row.getCell(9).numFmt='$#,##0.00'});styleExcelRows(ws,5,cols);if(rows.length){const total=ws.addRow(['','','','','','','','',{formula:`SUM(I5:I${4+rows.length})`}]);total.eachCell(cell=>{cell.font={name:'Aptos',size:10,bold:true,color:{argb:'F8F1E3'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD166'}}});total.getCell(9).numFmt='$#,##0.00'}return ws;
+  }
+  function addOverviewSheet(workbook,data){
+    const ws=workbook.addWorksheet('Report Overview',{views:[{state:'frozen',ySplit:4}]});applyExcelHeader(ws,'Axon Performance · Training Report',`Reporting period: ${reportScopeText(data.filters)} · Generated ${new Date().toLocaleString()}`,8);ws.getColumn(1).width=28;ws.getColumn(2).width=18;ws.getColumn(3).width=4;ws.getColumn(4).width=30;ws.getColumn(5).width=18;ws.getColumn(6).width=4;ws.getColumn(7).width=24;ws.getColumn(8).width=18;ws.addRow([]);const metrics=reportMetrics(data);const blocks=[['Total Attendance',metrics.present],['Completed Sessions',staffKpis(staffReportRows(data)).completed],['Booked Clients',metrics.booked],['Attendance Marked',`${metrics.marked}/${metrics.booked}`],['Scheduled Hours',metrics.hours],['Attendance Rate',`${metrics.attendanceRate}%`]];for(let i=0;i<blocks.length;i+=2){const row=ws.addRow([blocks[i][0],blocks[i][1],'',blocks[i+1]?.[0]||'',blocks[i+1]?.[1]||'']);row.height=27;[1,4].forEach(col=>{const cell=row.getCell(col);cell.font={name:'Aptos',size:10,bold:true,color:{argb:'A9B4C2'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'101A26'}}});[2,5].forEach(col=>{const cell=row.getCell(col);cell.font={name:'Aptos Display',size:16,bold:true,color:{argb:'F8F1E3'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'0D121A'}};cell.alignment={horizontal:'right',vertical:'middle'}})}ws.addRow([]);const start=ws.rowCount+1;ws.mergeCells(`A${start}:H${start}`);ws.getCell(`A${start}`).value='Workbook Contents';ws.getCell(`A${start}`).font={name:'Aptos',size:12,bold:true,color:{argb:'F8F1E3'}};ws.getCell(`A${start}`).fill={type:'pattern',pattern:'solid',fgColor:{argb:'1F8CFF'}};const notes=[['Session Register','Every scheduled session, booked count, attendance totals, coach, hours, and notes.'],['Attendance Detail','One row per booked client with package/contact details and attendance marker.'],['Coach Payroll','Scheduled hours, stored rate per hour, formula-based estimated payroll, format mix, and attendance.'],['Client Attendance','Client-level attendance totals across the selected period.'],['Class Type Summary','Training session volume and attendance by class type.']];notes.forEach(n=>{const r=ws.addRow(n);r.getCell(1).font={bold:true,color:{argb:'F8F1E3'}};r.getCell(2).font={color:{argb:'A9B4C2'}};r.getCell(2).alignment={wrapText:true};r.height=24});return ws;
+  }
+  async function exportExcelReport(kind,data,staffId=''){
+    const sourceButton={staff:staffId?'exportOneStaff':'exportStaffWorkbook',training:'exportTrainingWorkbook',payroll:'exportPayrollWorkbook',attendance:'exportAttendanceWorkbook'}[kind];const btn=document.getElementById(sourceButton);const original=btn?.innerHTML;if(btn){btn.disabled=true;btn.innerHTML='<span class="report-loading">Building workbook</span>'}try{const ExcelJS=await ensureExcelJS();const wb=new ExcelJS.Workbook();wb.creator='Axon Performance';wb.created=new Date();wb.modified=new Date();wb.properties={title:'Axon Performance Staff Performance Report',subject:'Staff performance, training attendance, commissions, and member incentives',company:'Axon Performance'};if(kind==='staff'){addStaffPerformanceSheet(wb,data,staffId);addCoachCommissionSheet(wb,data,staffId);addMemberSignupSheet(wb,data,staffId);addSessionRegisterSheet(wb,data);addAttendanceSheet(wb,data);addClientSummarySheet(wb,data);addClassSummarySheet(wb,data)}else if(kind==='training'){addStaffPerformanceSheet(wb,data);addOverviewSheet(wb,data);addSessionRegisterSheet(wb,data);addAttendanceSheet(wb,data);addPayrollSheet(wb,data);addClientSummarySheet(wb,data);addClassSummarySheet(wb,data)}else if(kind==='payroll'){addStaffPerformanceSheet(wb,data);addCoachCommissionSheet(wb,data);addMemberSignupSheet(wb,data)}else{addOverviewSheet(wb,data);addAttendanceSheet(wb,data);addSessionRegisterSheet(wb,data);addClientSummarySheet(wb,data)}const buffer=await wb.xlsx.writeBuffer();const suffix=kind==='staff'?(staffId?'staff-dashboard':'staff-performance'):kind==='training'?'training-operations':kind==='payroll'?'coach-payroll':'attendance-register';downloadBlob(`axon-performance-${suffix}-${fileStamp()}.xlsx`,new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));toast('Excel workbook exported.')}catch(error){console.error('Excel export failed',error);toast(error.message||'Excel export failed.','error')}finally{if(btn){btn.disabled=false;btn.innerHTML=original}}}
+
+
+  async function openBackups(){let data;try{data=await api('?scope=backups')}catch(e){toast(e.message,'error');return}const list=data.backups||[];openModal(`<div class="modal-head"><div><h2>Backups & Export</h2><p>Every server save creates a recoverable snapshot. Download a full backup before major upgrades.</p></div><button class="btn ghost" onclick="closeModal()">Close</button></div><div class="modal-grid"><section class="card"><div class="section-title"><h2>Full Export</h2><span>portable JSON</span></div><p class="hint">Contains sessions, class types, coaches, availability, clients, bookings, and requests.</p><div class="modal-actions" style="justify-content:flex-start"><button class="btn primary" id="downloadBackup">Download Full Backup</button><button class="btn" id="uploadBackup">Restore from File</button><input id="backupFile" type="file" accept="application/json,.json" class="hidden"></div></section><section class="card"><div class="section-title"><h2>Automatic Server Snapshots</h2><span>latest ${list.length}</span></div><div class="backup-list">${list.length?list.map(x=>`<div class="backup-row"><div><b>Revision ${x.revision}</b><small>${fmtDateTime(x.createdAt)} · ${esc(x.reason||'state save')}</small></div><button class="btn ghost" data-restore="${esc(x.id)}">Restore</button></div>`).join(''):'<div class="empty">Snapshots appear after the first save.</div>'}</div></section></div>`);document.getElementById('downloadBackup').onclick=()=>download(`axon-performance-scheduler-backup-${iso(new Date())}.json`,{schema:'axon-performance-scheduler-backup-v1',exportedAt:new Date().toISOString(),state});document.getElementById('uploadBackup').onclick=()=>document.getElementById('backupFile').click();document.getElementById('backupFile').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(async txt=>{try{const obj=JSON.parse(txt);if(!obj.state||!confirm('Restore this full backup? Current state will be snapshotted first.'))return;const r=await api('',{method:'POST',body:JSON.stringify({action:'restore',state:obj.state})});state=r.state;render();closeModal();toast('Backup restored securely.')}catch(err){toast('That backup file could not be restored.','error')}})};modal.querySelectorAll('[data-restore]').forEach(b=>b.onclick=async()=>{if(!confirm('Restore this server snapshot? Current state will be snapshotted first.'))return;try{const r=await api('',{method:'POST',body:JSON.stringify({action:'restore-backup',backupId:b.dataset.restore})});state=r.state;render();closeModal();toast('Server snapshot restored.')}catch(e){toast(e.message,'error')}})}
+  function download(name,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+  async function commit(mutator,message){const before=clone(state);mutator(state);try{await commitState(message)}catch(e){if(!(e.status===409&&e.data?.state)){state=before;render()}throw e}}
+  async function commitState(message){if(saving)throw new Error('A previous change is still saving.');saving=true;render();try{const r=await api('',{method:'POST',body:JSON.stringify({action:'save',state,baseRevision:state.revision,reason:message})});state=r.state;state.updatedAt=r.state.updatedAt;toast(message)}catch(e){if(e.status===409&&e.data?.state){state=e.data.state;toast('A newer version was found. Reloaded server changes; try again.','error')}throw e}finally{saving=false;render()}}
+  function renderConnectionError(error){
+    const detail=error?.message||'The shared schedule service is unavailable.';
+    root.innerHTML=`<section class="login"><div class="login-card"><div class="login-brand-lockup">${brandWordmark('login-wordmark')}</div><div class="eyebrow" style="margin-top:15px">Schedule connection</div><h1>Unable to load the live schedule</h1><p class="login-copy">${esc(detail)} Please refresh in a moment. The coach portal and public feeds use the same server-backed schedule.</p><div class="login-actions"><button class="btn primary" id="retryLoad">Retry</button><a class="btn ghost" href="index.html">Coach Sign In</a></div></div></section>`;
+    document.getElementById('retryLoad')?.addEventListener('click',()=>{root.innerHTML=`<section class="login"><div class="login-card"><div class="login-brand-lockup">${brandWordmark('login-wordmark')}</div><h1>Connecting…</h1></div></section>`;fetchState()});
+  }
+  async function fetchState(){
+    try{
+      const scope=mode==='coach'?'admin':'public';
+      const r=await api(`?scope=${scope}`);
+      const incoming=r.state;
+      if(!incoming) throw new Error('The scheduler service returned no schedule data.');
+      if(!state||incoming.revision!==state.revision){state=incoming;render()}
+      return true;
+    }catch(e){
+      if(mode==='coach'&&e.status===401){
+        token='';
+        sessionStorage.removeItem('axon_scheduler_admin_token');
+        sessionStorage.removeItem('axon_scheduler_user');
+        currentUser=null;
+        mode='login';
+        state=null;
+        render();
+      } else {
+        console.warn('Scheduler state could not load.',e);
+        if(!state) renderConnectionError(e);
+      }
+      return false;
+    }
+  }
+  function startPolling(){stopPolling();poller=setInterval(fetchState,mode==='coach'?3500:3000)}function stopPolling(){if(poller)clearInterval(poller);poller=null}
+  async function boot(){
+    if(mode==='login'){renderLogin();return}
+    const loaded=await fetchState();
+    if(loaded) startPolling();
+  }
+  boot();
+})();
